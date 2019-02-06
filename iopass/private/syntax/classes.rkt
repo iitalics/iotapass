@@ -2,11 +2,12 @@
 (provide
  terminal-spec
  nonterminal-spec
+ nonterminal-delta-spec
  production
  form)
 
 (require
- (prefix-in t: "../types.rkt")
+ (prefix-in τ/ "../types.rkt")
  (for-template racket/base)
  (rename-in syntax/parse [attribute @]))
 
@@ -22,10 +23,11 @@
                   contract:id
                   {~optional {~seq #:compare equal:id}
                              #:defaults ([equal #'equal?])}]
-           #:attr value (t:terminal-spec this-syntax
+           #:attr value (τ/terminal-spec this-syntax
                                          (map syntax-e (@ mv))
                                          #'contract
                                          #'equal)])
+
 ;; <form> ::= <id>
 ;;          | (<form> ...)
 ;;          | (<form> ...
@@ -33,6 +35,7 @@
 ;;             <form> ...)
 
 (define-syntax-class ooo
+  #:description "ellipsis"
   [pattern {~datum ...}])
 
 (define-syntax-class form
@@ -40,19 +43,24 @@
   [pattern mv:id
            #:fail-when (eq? (syntax-e #'mv) '...)
            "unexpected ellipsis"
-           #:attr value (t:metavar this-syntax (syntax-e #'mv))]
+           #:attr value (τ/metavar this-syntax (syntax-e #'mv))]
 
   [pattern (a:form ... b:form :ooo c:form ...)
-           #:attr value (t:form-list this-syntax
+           #:attr value (τ/form-list this-syntax
                                      (@ a.value)
-                                     (t:ellipsis (@ b.value))
+                                     (τ/ellipsis (@ b.value))
                                      (@ c.value))]
 
   [pattern (a:form ...)
-           #:attr value (t:form-list this-syntax
+           #:attr value (τ/form-list this-syntax
                                      (@ a.value)
                                      #f
                                      '())]
+
+  [pattern (:ooo . _)
+           #:fail-when #t
+           "form must precede ellipsis"
+           #:attr value #f]
 
   [pattern (_ ... :ooo _ ... :ooo . _)
            #:fail-when #t
@@ -63,7 +71,7 @@
 (define-syntax-class production
   #:attributes (value)
   [pattern (head:id . form:form)
-           #:attr value (t:production this-syntax
+           #:attr value (τ/production this-syntax
                                       (syntax-e #'head)
                                       (@ form.value))])
 
@@ -73,7 +81,7 @@
   #:datum-literals (::=)
   #:attributes ([mv 1] value)
   [pattern [mv:id ...+ ::= prod:production ...]
-           #:attr value (t:nonterminal-spec this-syntax
+           #:attr value (τ/nonterminal-spec this-syntax
                                             (map syntax-e (@ mv))
                                             (@ prod.value))])
 
@@ -106,3 +114,88 @@
                                     (syntax-e p/m))])))]
            #:attr add ps
            #:attr del ms])
+
+;; =======================================================================================
+
+(module+ test
+  (require
+   rackunit
+   racket/match
+   (for-syntax racket/base))
+
+  (define-syntax-rule (check-parse syntax-class
+                                   template
+                                   output-pattern)
+    (check-match (syntax-parse (quote-syntax template)
+                   [{~var x syntax-class}
+                    (@ x.value)])
+                 output-pattern))
+
+  (define-syntax-rule (check-parse-exn syntax-class
+                                       template
+                                       error-regex)
+    (check-exn error-regex
+               (λ () (syntax-parse (quote-syntax template)
+                       [{~var || syntax-class} (void)]))))
+
+  (define-match-expander free-id=
+    (λ (stx)
+      (syntax-case stx ()
+        [(_ id) #'(== #'id free-identifier=?)])))
+
+  ;; --------------------------------------
+  ;; Test parsing
+
+  (check-parse terminal-spec
+               [i j ::= integer?]
+               (τ/terminal-spec _
+                                '(i j)
+                                (free-id= integer?)
+                                (free-id= equal?)))
+
+  (check-parse terminal-spec
+               [i j ::= integer? #:compare =]
+               (τ/terminal-spec _
+                                '(i j)
+                                (free-id= integer?)
+                                (free-id= =)))
+
+  (check-parse form
+               (n [x i] ... m r)
+               (τ/form-list _
+                            (list (τ/metavar _ 'n))
+                            (τ/ellipsis (τ/form-list _
+                                                     (list (τ/metavar _ 'x)
+                                                           (τ/metavar _ 'i))
+                                                     #f
+                                                     '()))
+                            (list (τ/metavar _ 'm)
+                                  (τ/metavar _ 'r))))
+
+  (check-parse form
+               ()
+               (τ/form-list _ '() #f '()))
+
+  (check-parse-exn form
+                   (a ... b ...)
+                   #px"cannot have multiple ellipsis")
+
+  (check-parse-exn form
+                   (... b)
+                   #px"form must precede ellipsis")
+
+  (check-parse production
+               (app C x ...)
+               (τ/production _
+                             'app
+                             (τ/form-list _
+                                          (list (τ/metavar _ 'C))
+                                          (τ/ellipsis (τ/metavar _ 'x))
+                                          '())))
+
+  (check-parse nonterminal-spec
+               [e f ::= (let [x e] e) (@ atom)]
+               (τ/nonterminal-spec _
+                                   '(e f)
+                                   (list (τ/production _ 'let _)
+                                         (τ/production _ '@ _)))))
