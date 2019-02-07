@@ -2,6 +2,10 @@
 (provide
  (all-defined-out))
 
+(require
+ racket/set
+ racket/format)
+
 ;; =======================================================================================
 
 ;; spec ::=
@@ -10,6 +14,28 @@
 (struct spec
   [orig-stx
    metavar-symbols])
+
+;; [listof spec] -> (or #f string?)
+;; Returns string error message if there are any problems.
+(define (spec-set-invalid? ss)
+  (let/ec die
+    (for*/fold ([mvs (seteq)])
+               ([s (in-list ss)]
+                [x (in-list (spec-metavar-symbols s))])
+      (when (set-member? mvs x)
+        (die (~a "metavar " x " defined multiple times")))
+      (set-add mvs x))
+    #f))
+
+(module+ test
+  (require rackunit)
+
+  (check-match (spec-set-invalid? (list)) #f)
+  (check-match (spec-set-invalid? (list (terminal-spec 0 '(y y) #'a #'b)))
+               "metavar y defined multiple times")
+  (check-match (spec-set-invalid? (list (terminal-spec 0 '(x y) #'a #'b)
+                                        (terminal-spec 0 '(x) #'c #'d)))
+               "metavar x defined multiple times"))
 
 ;; -------------------
 ;; Terminals
