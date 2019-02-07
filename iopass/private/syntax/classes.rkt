@@ -101,7 +101,7 @@
 (define-syntax-class nonterminal-spec
   #:datum-literals (::=)
   #:attributes ([mv 1] value generate)
-  [pattern [mv:id ...+ ::= prod:production ...]
+  [pattern [mv:id ...+ ::= ~! prod:production ...]
            #:attr value (τ/nonterminal-spec this-syntax
                                             (map syntax-e (@ mv))
                                             (@ prod.value))

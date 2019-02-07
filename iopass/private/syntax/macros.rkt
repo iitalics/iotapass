@@ -1,6 +1,7 @@
 #lang racket/base
 (provide
- define-terminals)
+ define-terminals
+ define-language)
 
 (require
  (for-syntax
@@ -95,22 +96,32 @@
       _
       'L0
       _
-      (list (τ/nonterminal-spec
-             _
-             '(e)
-             (list (τ/production _
-                                 'num
-                                 (τ/form-list _ (list (τ/metavar _ 'i)) #f '()))
-                   (τ/production _
-                                 'op
-                                 (τ/form-list _
-                                              (list (τ/metavar _ 's))
-                                              (τ/ellipsis (τ/metavar _ 'e))
-                                              '()))))
-            (τ/nonterminal-spec
-             _
-             '(df)
-             _)))))
+      (list
+       ;; [e ::= (num i) (op s e ...)]
+       (τ/nonterminal-spec
+        _
+        '(e)
+        (list (τ/production _
+                            'num
+                            (τ/form-list _ (list (τ/metavar _ 'i)) #f '()))
+              (τ/production _
+                            'op
+                            (τ/form-list _
+                                         (list (τ/metavar _ 's))
+                                         (τ/ellipsis (τ/metavar _ 'e))
+                                         '()))))
+
+       ;; [df ::= (def x e)]
+       (τ/nonterminal-spec
+        _
+        '(df)
+        (list (τ/production _
+                            'def
+                            (τ/form-list _
+                                         (list (τ/metavar _ 'x)
+                                               (τ/metavar _ 'e))
+                                         #f
+                                         '()))))))))
 
   ;; =================================================================
 
@@ -120,11 +131,10 @@
   (define-syntax terminal-def-stuff
     (syntax-parser
       [(_ b:terminals-definition-binding)
-       #:with [e ...]
-       (for/list ([t (in-list (@ b.terminals))])
-         (match t
-           [(τ/terminal-spec _ mvs p e)
-            #`(list '#,mvs #,p #,e)]))
+       #:with [e ...] (for/list ([t (in-list (@ b.terminals))])
+                        (match t
+                          [(τ/terminal-spec _ mvs p e)
+                           #`(list '#,mvs #,p #,e)]))
        #'(list e ...)]))
 
   ;; ---------------------
