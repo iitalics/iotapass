@@ -15,27 +15,40 @@
   [orig-stx
    metavar-symbols])
 
-;; [listof spec] -> (or #f string?)
-;; Returns string error message if there are any problems.
-(define (spec-set-invalid? ss)
+;; [listof spec] -> (or [listof symbol] spec-set-error)
+(define (spec-set-metavars ss)
   (let/ec die
-    (for*/fold ([mvs (seteq)])
-               ([s (in-list ss)]
-                [x (in-list (spec-metavar-symbols s))])
-      (when (set-member? mvs x)
-        (die (~a "metavar " x " defined multiple times")))
-      (set-add mvs x))
-    #f))
+    (set->list
+     (for*/fold ([mvs (seteq)])
+                ([s (in-list ss)]
+                 [x (in-list (spec-metavar-symbols s))])
+       (when (set-member? mvs x)
+         (die (repeated-metavar-error (spec-orig-stx s) x)))
+       (set-add mvs x)))))
+
+(struct spec-set-error [stx msg] #:transparent)
+(define (repeated-metavar-error stx mv)
+  (spec-set-error stx (~a "metavar " mv " defined multiple times")))
 
 (module+ test
   (require rackunit)
 
-  (check-match (spec-set-invalid? (list)) #f)
-  (check-match (spec-set-invalid? (list (terminal-spec 0 '(y y) #'a #'b)))
-               "metavar y defined multiple times")
-  (check-match (spec-set-invalid? (list (terminal-spec 0 '(x y) #'a #'b)
-                                        (terminal-spec 0 '(x) #'c #'d)))
-               "metavar x defined multiple times"))
+  ;; ------------
+  ;; Test spec-set-metavars
+
+  (check-match (spec-set-metavars (list))
+               '())
+  (check-match (spec-set-metavars (list (terminal-spec 0 '(x y) #'a #'b)))
+               (list-no-order 'x 'y))
+  (check-match (spec-set-metavars (list (terminal-spec 0 '(x) #'a #'b)
+                                        (terminal-spec 1 '(y z) #'c #'d)))
+               (list-no-order 'x 'y 'z))
+
+  (check-match (spec-set-metavars (list (terminal-spec 0 '(y y) #'a #'b)))
+               (spec-set-error 0 "metavar y defined multiple times"))
+  (check-match (spec-set-metavars (list (terminal-spec 0 '(x y) #'a #'b)
+                                        (terminal-spec 1 '(x) #'c #'d)))
+               (spec-set-error 1 "metavar x defined multiple times")))
 
 ;; -------------------
 ;; Terminals

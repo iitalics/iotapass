@@ -15,11 +15,19 @@
 ;; =======================================================================================
 
 (begin-for-syntax
-  (define (check-spec-set ss stx)
-    (cond [(τ/spec-set-invalid? ss)
-           =>
-           (λ (msg)
-             (raise-syntax-error #f msg stx))])))
+  ;; [listof spec] -> [listof symbol]
+  ;; Raises syntax error if any metavars are repeated
+  (define (check-spec-set-metavars ss)
+    (match (τ/spec-set-metavars ss)
+      [(τ/spec-set-error stx msg)
+       (raise-syntax-error #f msg stx)]
+      [mvs
+       mvs]))
+
+  ;; [listof nonterminal-spec] [listof metavar] -> void
+  ;; Raises syntax error if any nonterminals are malformed
+  (define (check-nonterminals nts metavars)
+    (void)))
 
 ;; ----------------------
 ;; define-terminals
@@ -33,7 +41,7 @@
      #'(define-syntax name
          (let ([tms (list tm.generate
                           ...)])
-           (check-spec-set tms (quote-syntax name))
+           (check-spec-set-metavars tms)
            (terminals-definition tms)))]))
 
 ;; ----------------------
@@ -51,11 +59,10 @@
      #`(define-syntax name
          (let ([stx (quote-syntax #,this-syntax)]
                [tms (get-terminals (quote-syntax terminals-id))]
-               [nts (list nt.generate
-                          ...)])
-           ;; (TODO: validate this language definition)
-           (check-spec-set (append tms nts) stx)
-           (language-definition (τ/language stx 'name tms nts))))]))
+               [nts (list nt.generate ...)])
+           (let ([mvs (check-spec-set-metavars (append tms nts))])
+             (check-nonterminals nts mvs)
+             (language-definition (τ/language stx 'name tms nts)))))]))
 
 (module+ test
 
