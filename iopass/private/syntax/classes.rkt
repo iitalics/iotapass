@@ -18,7 +18,7 @@
 
 (define-syntax-class terminal-spec
   #:datum-literals (::=)
-  #:attributes ([mv 1] contract equal value)
+  #:attributes (value generate)
   [pattern [mv:id ...+ ::= ~!
                   contract:id
                   {~optional {~seq #:compare equal:id}
@@ -26,7 +26,12 @@
            #:attr value (τ/terminal-spec this-syntax
                                          (map syntax-e (@ mv))
                                          #'contract
-                                         #'equal)])
+                                         #'equal)
+           #:with generate
+           #`(τ/terminal-spec (quote-syntax #,this-syntax)
+                              '(mv ...)
+                              (quote-syntax contract)
+                              (quote-syntax equal))])
 
 ;; <form> ::= <id>
 ;;          | (<form> ...)
@@ -39,51 +44,72 @@
   [pattern {~datum ...}])
 
 (define-syntax-class form
-  #:attributes (value)
+  #:attributes (value generate)
   [pattern mv:id
            #:fail-when (eq? (syntax-e #'mv) '...)
            "unexpected ellipsis"
-           #:attr value (τ/metavar this-syntax (syntax-e #'mv))]
+           #:attr value (τ/metavar this-syntax (syntax-e #'mv))
+           #:with generate
+           #`(τ/metavar (quote-syntax #,this-syntax) 'mv)]
 
   [pattern (a:form ... b:form :ooo c:form ...)
            #:attr value (τ/form-list this-syntax
                                      (@ a.value)
                                      (τ/ellipsis (@ b.value))
-                                     (@ c.value))]
+                                     (@ c.value))
+           #:with generate
+           #`(τ/form-list (quote-syntax #,this-syntax)
+                          (list a.generate ...)
+                          (τ/ellipsis b.generate)
+                          (list c.generate ...))]
 
   [pattern (a:form ...)
            #:attr value (τ/form-list this-syntax
                                      (@ a.value)
                                      #f
-                                     '())]
+                                     '())
+           #:with generate
+           #`(τ/form-list (quote-syntax #,this-syntax)
+                          (list a.generate ...)
+                          #f
+                          '())]
 
   [pattern (:ooo . _)
            #:fail-when #t
            "form must precede ellipsis"
-           #:attr value #f]
+           #:attr value #f #:with generate #f]
 
   [pattern (_ ... :ooo _ ... :ooo . _)
            #:fail-when #t
            "cannot have multiple ellipsis in list form"
-           #:attr value #f])
+           #:attr value #f #:with generate #f])
 
 ;; (<id> . <form>)
 (define-syntax-class production
-  #:attributes (value)
+  #:attributes (value generate)
   [pattern (head:id . form:form)
            #:attr value (τ/production this-syntax
                                       (syntax-e #'head)
-                                      (@ form.value))])
+                                      (@ form.value))
+           #:with generate
+           #`(τ/production (quote-syntax #,this-syntax)
+                           'head
+                           form.generate)])
 
 ;; <nonterminal-spec> ::=
 ;;   [<id> ... ::= <production> ...]
 (define-syntax-class nonterminal-spec
   #:datum-literals (::=)
-  #:attributes ([mv 1] value)
+  #:attributes ([mv 1] value generate)
   [pattern [mv:id ...+ ::= prod:production ...]
            #:attr value (τ/nonterminal-spec this-syntax
                                             (map syntax-e (@ mv))
-                                            (@ prod.value))])
+                                            (@ prod.value))
+           #:with generate
+           #`(τ/nonterminal-spec (quote-syntax #,this-syntax)
+                                 '(mv ...)
+                                 (list prod.generate
+                                       ...))])
 
 ;; <nonterminal-δ-spec> ::=
 ;;   [<id> ... += <production> ...
