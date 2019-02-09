@@ -34,7 +34,7 @@
   #:transparent)
 
 ;; form -> exact-integer
-;; Return the number of fields in the representation of the given form
+;; Returns the number of fields in the representation of the given form.
 (define (form-field-count fm)
   ;; [listof form] -> exact-integer
   (define (count* fms)
@@ -42,15 +42,13 @@
       (form-field-count fm)))
   (match fm
     [(metavar _ x) 1]
-    [(form-list _ before rep after)
+    [(form-list _ before repeat after)
      (+ (count* before)
-        (count* after)
-        (if rep
-          (form-field-count (ellipsis-repeated-form rep))
-          0))]))
+        (count* (ellipsis->list repeat))
+        (count* after))]))
 
 ;; form -> [listof field-repr]
-;; Return list of fields to represent the given form
+;; Returns list of fields to represent the given form.
 (define (form-field-repr fm)
   (reverse
    (let repr/depth ([fm fm]
@@ -58,13 +56,9 @@
                     [ed 0])
 
      (define (repr fm lst)
-       (repr/depth fm lst 0))
-     (define (repr-ellipse repeat lst)
-       (if repeat
-         (repr/depth (ellipsis-repeated-form repeat)
-                     lst
-                     (add1 ed))
-         lst))
+       (repr/depth fm lst ed))
+     (define (repr+1 fm lst)
+       (repr/depth fm lst (add1 ed)))
 
      (match fm
        [(metavar _ x)
@@ -73,9 +67,9 @@
 
        [(form-list _ before repeat after)
         (~> lst
-            (foldl repr _ before)
-            (repr-ellipse repeat _)
-            (foldl repr _ after))]))))
+            (foldl repr   _ before)
+            (foldl repr+1 _ (ellipsis->list repeat))
+            (foldl repr   _ after))]))))
 
 
 (module+ test

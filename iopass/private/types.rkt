@@ -109,6 +109,13 @@
 (struct form-list form [before middle after] #:transparent)
 (struct ellipsis [repeated-form] #:transparent)
 
+;; (or #f ellipsis) -> [listof form]
+;; Helper for traversing optional ellipsis forms.
+(define (ellipsis->list e)
+  (match e
+    [(ellipsis f) (list f)]
+    [#f '()]))
+
 ;; form [setof symbol] -> (or #f metavar)
 ;; If any metavariable names in 'fm' are not in 'mvs', returns that metavar.
 (define (form-unbound-metavar fm mvs)
@@ -120,8 +127,7 @@
      (define (form-unbound fm*)
        (form-unbound-metavar fm* mvs))
      (or (ormap form-unbound as)
-         (and maybe-ellipsis
-              (form-unbound (ellipsis-repeated-form maybe-ellipsis)))
+         (ormap form-unbound (ellipsis->list maybe-ellipsis))
          (ormap form-unbound bs))]))
 
 ;; form [setof symbol] -> (or #f metavar)
