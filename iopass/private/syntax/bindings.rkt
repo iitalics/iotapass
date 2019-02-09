@@ -9,7 +9,7 @@
  get-language)
 
 (require
- (prefix-in τ/ "../types.rkt")
+ "../types.rkt"
  syntax/parse)
 
 ;; =======================================================================================
@@ -18,8 +18,8 @@
   (raise-syntax-error #f "this form cannot be used an expression" stx))
 
 ;; -----------
-;; (terminals-definition τ/terminal-set)
-;; for syntax bindings created by (define-terminals ....)
+;; (terminals-definition terminal-set)
+;; For syntax bindings created by (define-terminals ....)
 
 (struct terminals-definition
   [terminals]
@@ -33,14 +33,14 @@
            #:when (terminals-definition? lv)
            #:attr terminals (terminals-definition-terminals lv)])
 
-;; identifier -> τ/terminal-set
+;; identifier -> terminal-set
 (define (get-terminals id)
   (terminals-definition-terminals
    (syntax-local-value id)))
 
 ;; -----------
-;; (language-definition τ/language)
-;; for syntax bindings created by (define-language ....)
+;; (language-definition language)
+;; For syntax bindings created by (define-language ....)
 
 (struct language-definition
   [language]
@@ -54,7 +54,7 @@
            #:when (language-definition? lv)
            #:attr language (language-definition-language lv)])
 
-;; identifier -> τ/language
+;; identifier -> language
 (define (get-language id)
   (language-definition-language
    (syntax-local-value id)))

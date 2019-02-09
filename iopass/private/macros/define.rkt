@@ -5,9 +5,9 @@
 
 (require
  (for-syntax
-  (prefix-in τ/ "../types.rkt")
-  "bindings.rkt"
-  "classes.rkt"
+  (prefix-in types: "../types.rkt")
+  "../syntax/bindings.rkt"
+  "../syntax/classes.rkt"
   racket/base
   racket/match
   (rename-in syntax/parse [attribute @])))
@@ -18,8 +18,8 @@
   ;; [listof spec] -> [listof symbol]
   ;; Raises syntax error if any metavars are repeated
   (define (check-spec-set-metavars ss)
-    (match (τ/spec-set-metavars ss)
-      [(τ/spec-repeated-metavar-error stx x)
+    (match (types:spec-set-metavars ss)
+      [(types:spec-repeated-metavar-error stx x)
        (raise-syntax-error #f
          (format "metavariable '~a' defined multiple times" x)
          stx)]
@@ -30,9 +30,9 @@
   ;; Raises syntax error if any nonterminals are malformed
   (define (check-nonterminals nts metavars)
     (for ([nt (in-list nts)])
-      (match (τ/nonterminal-unbound-metavar nt metavars)
+      (match (types:nonterminal-unbound-metavar nt metavars)
         [#f (void)]
-        [(τ/metavar stx x)
+        [(types:metavar stx x)
          (raise-syntax-error #f
            (format "metavariable unbound")
            stx)]))))
@@ -72,7 +72,7 @@
            (let ([mvs (check-spec-set-metavars (append tms nts))])
              (check-nonterminals nts mvs)
              (language-definition
-              (τ/make-language stx 'name tms nts)))))]))
+              (types:make-language stx 'name tms nts)))))]))
 
 (module+ test
 
@@ -129,42 +129,42 @@
 
     (check-match
      (get-terminals #'T0)
-     (list (τ/terminal-spec _ '(i j) _ _)
-           (τ/terminal-spec _ '(x y) _ _)
-           (τ/terminal-spec _ '(s) _ _)))
+     (list (types:terminal-spec _ '(i j) _ _)
+           (types:terminal-spec _ '(x y) _ _)
+           (types:terminal-spec _ '(s) _ _)))
 
     (check-match
      (get-language #'L0)
-     (τ/language
+     (types:language
       _
       'L0
       (== (get-terminals #'T0))
       (list
        ;; [e ::= (num i) (op s e ...)]
-       (τ/nonterminal-spec
+       (types:nonterminal-spec
         _
         '(e)
-        (list (τ/production _
-                            'num
-                            (τ/form-list _ (list (τ/metavar _ 'i)) #f '()))
-              (τ/production _
-                            'op
-                            (τ/form-list _
-                                         (list (τ/metavar _ 's))
-                                         (τ/ellipsis (τ/metavar _ 'e))
-                                         '()))))
+        (list (types:production _
+                                'num
+                                (types:form-list _ (list (types:metavar _ 'i)) #f '()))
+              (types:production _
+                                'op
+                                (types:form-list _
+                                                 (list (types:metavar _ 's))
+                                                 (types:ellipsis (types:metavar _ 'e))
+                                                 '()))))
 
        ;; [df ::= (def x e)]
-       (τ/nonterminal-spec
+       (types:nonterminal-spec
         _
         '(df)
-        (list (τ/production _
-                            'def
-                            (τ/form-list _
-                                         (list (τ/metavar _ 'x)
-                                               (τ/metavar _ 'e))
-                                         #f
-                                         '())))))
+        (list (types:production _
+                                'def
+                                (types:form-list _
+                                                 (list (types:metavar _ 'x)
+                                                       (types:metavar _ 'e))
+                                                 #f
+                                                 '())))))
       _)))
 
   ;; =================================================================
@@ -177,7 +177,7 @@
       [(_ b:terminals-definition-binding)
        #:with [e ...] (for/list ([t (in-list (@ b.terminals))])
                         (match t
-                          [(τ/terminal-spec _ mvs p e)
+                          [(types:terminal-spec _ mvs p e)
                            #`(list '#,mvs #,p #,e)]))
        #'(list e ...)]))
 

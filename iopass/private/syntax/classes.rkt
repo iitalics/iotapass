@@ -7,7 +7,7 @@
  form)
 
 (require
- (prefix-in τ/ "../types.rkt")
+ (prefix-in types: "../types.rkt")
  (for-template racket/base)
  (rename-in syntax/parse [attribute @]))
 
@@ -26,15 +26,15 @@
                   {~optional {~seq #:compare equal:id}
                              #:defaults ([equal #'equal?])}]
            #:with [definitions ...] #'[]
-           #:attr value (τ/terminal-spec this-syntax
-                                         (map syntax-e (@ mv))
-                                         #'contract
-                                         #'equal)
+           #:attr value (types:terminal-spec this-syntax
+                                             (map syntax-e (@ mv))
+                                             #'contract
+                                             #'equal)
            #:with generate
-           #`(τ/terminal-spec (quote-syntax #,this-syntax)
-                              '(mv ...)
-                              (quote-syntax contract)
-                              (quote-syntax equal))]
+           #`(types:terminal-spec (quote-syntax #,this-syntax)
+                                  '(mv ...)
+                                  (quote-syntax contract)
+                                  (quote-syntax equal))]
 
   [pattern [mv:id ...+ ::=
                   [symbol:id ...]]
@@ -44,15 +44,15 @@
                 (and (symbol? x)
                      (or (eq? x 'symbol)
                          ...)))]
-           #:attr value (τ/terminal-spec this-syntax
-                                         (map syntax-e (@ mv))
-                                         #'predicate-id
-                                         #'eq?)
+           #:attr value (types:terminal-spec this-syntax
+                                             (map syntax-e (@ mv))
+                                             #'predicate-id
+                                             #'eq?)
            #:with generate
-           #`(τ/terminal-spec (quote-syntax #,this-syntax)
-                              '(mv ...)
-                              (quote-syntax predicate-id)
-                              #'eq?)])
+           #`(types:terminal-spec (quote-syntax #,this-syntax)
+                                  '(mv ...)
+                                  (quote-syntax predicate-id)
+                                  #'eq?)])
 
 ;; <form> ::= <id>
 ;;          | (<form> ...)
@@ -69,31 +69,31 @@
   [pattern mv:id
            #:fail-when (eq? (syntax-e #'mv) '...)
            "unexpected ellipsis"
-           #:attr value (τ/metavar this-syntax (syntax-e #'mv))
+           #:attr value (types:metavar this-syntax (syntax-e #'mv))
            #:with generate
-           #`(τ/metavar (quote-syntax #,this-syntax) 'mv)]
+           #`(types:metavar (quote-syntax #,this-syntax) 'mv)]
 
   [pattern (a:form ... b:form :ooo c:form ...)
-           #:attr value (τ/form-list this-syntax
-                                     (@ a.value)
-                                     (τ/ellipsis (@ b.value))
-                                     (@ c.value))
+           #:attr value (types:form-list this-syntax
+                                         (@ a.value)
+                                         (types:ellipsis (@ b.value))
+                                         (@ c.value))
            #:with generate
-           #`(τ/form-list (quote-syntax #,this-syntax)
-                          (list a.generate ...)
-                          (τ/ellipsis b.generate)
-                          (list c.generate ...))]
+           #`(types:form-list (quote-syntax #,this-syntax)
+                              (list a.generate ...)
+                              (types:ellipsis b.generate)
+                              (list c.generate ...))]
 
   [pattern (a:form ...)
-           #:attr value (τ/form-list this-syntax
-                                     (@ a.value)
-                                     #f
-                                     '())
+           #:attr value (types:form-list this-syntax
+                                         (@ a.value)
+                                         #f
+                                         '())
            #:with generate
-           #`(τ/form-list (quote-syntax #,this-syntax)
-                          (list a.generate ...)
-                          #f
-                          '())]
+           #`(types:form-list (quote-syntax #,this-syntax)
+                              (list a.generate ...)
+                              #f
+                              '())]
 
   [pattern (:ooo . _)
            #:fail-when #t
@@ -109,11 +109,11 @@
 (define-syntax-class production
   #:attributes (value generate)
   [pattern (head:id . form:form)
-           #:attr value (τ/production this-syntax
+           #:attr value (types:production this-syntax
                                       (syntax-e #'head)
                                       (@ form.value))
            #:with generate
-           #`(τ/production (quote-syntax #,this-syntax)
+           #`(types:production (quote-syntax #,this-syntax)
                            'head
                            form.generate)])
 
@@ -123,14 +123,14 @@
   #:datum-literals (::=)
   #:attributes ([mv 1] value generate)
   [pattern [mv:id ...+ ::= ~! prod:production ...]
-           #:attr value (τ/nonterminal-spec this-syntax
-                                            (map syntax-e (@ mv))
-                                            (@ prod.value))
+           #:attr value (types:nonterminal-spec this-syntax
+                                                (map syntax-e (@ mv))
+                                                (@ prod.value))
            #:with generate
-           #`(τ/nonterminal-spec (quote-syntax #,this-syntax)
-                                 '(mv ...)
-                                 (list prod.generate
-                                       ...))])
+           #`(types:nonterminal-spec (quote-syntax #,this-syntax)
+                                     '(mv ...)
+                                     (list prod.generate
+                                           ...))])
 
 ;; <nonterminal-δ-spec> ::=
 ;;   [<id> ... += <production> ...
@@ -149,8 +149,7 @@
                         ...+}
                   ...+]
            #:do [(define-values [ps ms]
-                   (for/fold ([ps '()]
-                              [ms '()])
+                   (for/fold ([ps '()] [ms '()])
                              ([p/m (in-list (@ pm))]
                               [prods (in-list (@ prod.value))])
                      (case (syntax-e p/m)
@@ -195,40 +194,40 @@
 
   (check-parse terminal-spec
                [i j ::= integer?]
-               (τ/terminal-spec _
-                                '(i j)
-                                (free-id= integer?)
-                                (free-id= equal?)))
+               (types:terminal-spec _
+                                    '(i j)
+                                    (free-id= integer?)
+                                    (free-id= equal?)))
 
   (check-parse terminal-spec
                [i j ::= integer? #:compare =]
-               (τ/terminal-spec _
-                                '(i j)
-                                (free-id= integer?)
-                                (free-id= =)))
+               (types:terminal-spec _
+                                    '(i j)
+                                    (free-id= integer?)
+                                    (free-id= =)))
 
   (check-parse form
                (n [x i] ... m r)
-               (τ/form-list _
-                            (list (τ/metavar _ 'n))
-                            (τ/ellipsis (τ/form-list _
-                                                     (list (τ/metavar _ 'x)
-                                                           (τ/metavar _ 'i))
-                                                     #f
-                                                     '()))
-                            (list (τ/metavar _ 'm)
-                                  (τ/metavar _ 'r))))
+               (types:form-list _
+                                (list (types:metavar _ 'n))
+                                (types:ellipsis (types:form-list _
+                                                                 (list (types:metavar _ 'x)
+                                                                       (types:metavar _ 'i))
+                                                                 #f
+                                                                 '()))
+                                (list (types:metavar _ 'm)
+                                      (types:metavar _ 'r))))
 
   (check-parse terminal-spec
                [binary ::= [+ - * /]]
-               (τ/terminal-spec _
-                                '(binary)
-                                (? identifier?)
-                                (free-id= eq?)))
+               (types:terminal-spec _
+                                    '(binary)
+                                    (? identifier?)
+                                    (free-id= eq?)))
 
   (check-parse form
                ()
-               (τ/form-list _ '() #f '()))
+               (types:form-list _ '() #f '()))
 
   (check-parse-exn form
                    (a ... b ...)
@@ -240,16 +239,16 @@
 
   (check-parse production
                (app C x ...)
-               (τ/production _
-                             'app
-                             (τ/form-list _
-                                          (list (τ/metavar _ 'C))
-                                          (τ/ellipsis (τ/metavar _ 'x))
-                                          '())))
+               (types:production _
+                                 'app
+                                 (types:form-list _
+                                                  (list (types:metavar _ 'C))
+                                                  (types:ellipsis (types:metavar _ 'x))
+                                                  '())))
 
   (check-parse nonterminal-spec
                [e f ::= (let [x e] e) (@ atom)]
-               (τ/nonterminal-spec _
-                                   '(e f)
-                                   (list (τ/production _ 'let _)
-                                         (τ/production _ '@ _)))))
+               (types:nonterminal-spec _
+                                       '(e f)
+                                       (list (types:production _ 'let _)
+                                             (types:production _ '@ _)))))
