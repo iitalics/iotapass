@@ -19,15 +19,23 @@
   ;; Raises syntax error if any metavars are repeated
   (define (check-spec-set-metavars ss)
     (match (τ/spec-set-metavars ss)
-      [(τ/spec-set-error stx msg)
-       (raise-syntax-error #f msg stx)]
+      [(τ/spec-repeated-metavar-error stx x)
+       (raise-syntax-error #f
+         (format "metavariable '~a' defined multiple times" x)
+         stx)]
       [mvs
        mvs]))
 
-  ;; [listof nonterminal-spec] [listof metavar] -> void
+  ;; [listof nonterminal-spec] [setof metavar] -> void
   ;; Raises syntax error if any nonterminals are malformed
   (define (check-nonterminals nts metavars)
-    (void)))
+    (for ([nt (in-list nts)])
+      (match (τ/nonterminal-unbound-metavar nt metavars)
+        [#f (void)]
+        [(τ/metavar stx x)
+         (raise-syntax-error #f
+           (format "metavariable unbound")
+           stx)]))))
 
 ;; ----------------------
 ;; define-terminals
@@ -66,12 +74,23 @@
 
 (module+ test
 
+  (require
+   (prefix-in r: racket/base))
+
+  (define equal?
+    ; (for testing hygiene)
+    'not-equal?)
+
   ;; Examples
 
   (define-terminals T0
     [i j ::= integer? #:compare =]
     [x y ::= symbol? #:compare eq?]
     [s ::= string?])
+
+  #;
+  (define-terminals T-bad1
+    [i j i ::= integer?])
 
   (define-language L0
     #:terminals T0
@@ -80,6 +99,17 @@
        (op s e ...)]
     [df ::=
         (def x e)])
+
+  #;
+  (define-language L-bad1
+    #:terminals T0
+    [e f ::= (num i)]
+    [e ::= ($ s)])
+
+  #;
+  (define-language L-bad2
+    #:terminals T0
+    [e ::= (num k)])
 
   ;; =================================================================
 
@@ -147,13 +177,10 @@
   ;; ---------------------
   ;; Runtime tests
 
-  (let ([i? integer?]
-        [s? string?]
-        [y? symbol?]
-        ;; fuck with hygiene:
+  (let (;; screw with hygiene:
         [integer? boolean?])
 
     (check-equal? (terminal-def-stuff T0)
-                  (list (list '(i j) i? =)
-                        (list '(x y) y? eq?)
-                        (list '(s)   s? equal?)))))
+                  (list (list '(i j) r:integer? =)
+                        (list '(x y) r:symbol? eq?)
+                        (list '(s)   r:string? r:equal?)))))

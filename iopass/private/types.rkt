@@ -4,7 +4,7 @@
 
 (require
  racket/set
- racket/format)
+ racket/match)
 
 ;; =======================================================================================
 
@@ -15,40 +15,40 @@
   [orig-stx
    metavar-symbols])
 
-;; [listof spec] -> (or [listof symbol] spec-set-error)
+;; [listof spec] -> (or [setof symbol] spec-set-error)
 (define (spec-set-metavars ss)
   (let/ec die
-    (set->list
-     (for*/fold ([mvs (seteq)])
-                ([s (in-list ss)]
-                 [x (in-list (spec-metavar-symbols s))])
-       (when (set-member? mvs x)
-         (die (repeated-metavar-error (spec-orig-stx s) x)))
-       (set-add mvs x)))))
+    (for*/fold ([mvs (seteq)])
+               ([s (in-list ss)]
+                [x (in-list (spec-metavar-symbols s))])
+      (when (set-member? mvs x)
+        (die (spec-repeated-metavar-error (spec-orig-stx s) x)))
+      (set-add mvs x))))
 
-(struct spec-set-error [stx msg] #:transparent)
-(define (repeated-metavar-error stx mv)
-  (spec-set-error stx (~a "metavar " mv " defined multiple times")))
+(struct spec-set-error [stx] #:transparent)
+(struct spec-repeated-metavar-error spec-set-error [symbol] #:transparent)
 
 (module+ test
-  (require rackunit)
+  (require
+   rackunit
+   racket/match)
 
   ;; ------------
   ;; Test spec-set-metavars
 
   (check-match (spec-set-metavars (list))
-               '())
+               (? set-empty?))
   (check-match (spec-set-metavars (list (terminal-spec 0 '(x y) #'a #'b)))
-               (list-no-order 'x 'y))
+               (== (seteq 'x 'y)))
   (check-match (spec-set-metavars (list (terminal-spec 0 '(x) #'a #'b)
                                         (terminal-spec 1 '(y z) #'c #'d)))
-               (list-no-order 'x 'y 'z))
+               (== (seteq 'x 'y 'z)))
 
   (check-match (spec-set-metavars (list (terminal-spec 0 '(y y) #'a #'b)))
-               (spec-set-error 0 "metavar y defined multiple times"))
+               (spec-repeated-metavar-error 0 'y))
   (check-match (spec-set-metavars (list (terminal-spec 0 '(x y) #'a #'b)
                                         (terminal-spec 1 '(x) #'c #'d)))
-               (spec-set-error 1 "metavar x defined multiple times")))
+               (spec-repeated-metavar-error 1 'x)))
 
 ;; -------------------
 ;; Terminals
@@ -90,9 +90,57 @@
 ;;              [listof form]
 ;;              (or (ellipsis form) #f)
 ;;              [listof form])
-(struct metavar [orig-stx symbol])
-(struct form-list [orig-stx before middle after])
-(struct ellipsis [repeated-form])
+(struct form [orig-stx] #:transparent)
+(struct metavar form [symbol] #:transparent)
+(struct form-list form [before middle after] #:transparent)
+(struct ellipsis [repeated-form] #:transparent)
+
+;; form [setof symbol] -> (or #f metavar)
+;; If any metavariable names in 'fm' are not in 'mvs', returns that metavar.
+(define (form-unbound-metavar fm mvs)
+  (match fm
+    [(metavar _ x)
+     (cond [(set-member? mvs x) #f]
+           [else fm])]
+    [(form-list _ as maybe-ellipsis bs)
+     (define (form-unbound fm*)
+       (form-unbound-metavar fm* mvs))
+     (or (ormap form-unbound as)
+         (and maybe-ellipsis
+              (form-unbound (ellipsis-repeated-form maybe-ellipsis)))
+         (ormap form-unbound bs))]))
+
+;; form [setof symbol] -> (or #f metavar)
+;; If any metavariable names in the body of the nonterminal are not in 'mvs', returns that
+;; metavar.
+(define (nonterminal-unbound-metavar nt mvs)
+  (for/or ([p (in-list (nonterminal-spec-productions nt))])
+    (form-unbound-metavar (production-form p)
+                          mvs)))
+
+(module+ test
+
+  ;; ------------
+  ;; Test {form,nonterminal}-unbound-metavar
+
+  (define mX (metavar #'x 'x))
+  (define mY (metavar #'y 'y))
+  (check-equal? (form-unbound-metavar (form-list #'_ (list mX) #f '())
+                                      (seteq 'x))
+                #f)
+  (check-equal? (form-unbound-metavar (form-list #'_ (list mX) #f '())
+                                      (seteq))
+                mX)
+  (check-equal? (form-unbound-metavar (form-list #'_ '() (ellipsis mY) '())
+                                      (seteq 'y))
+                #f)
+  (check-equal? (form-unbound-metavar (form-list #'_ '() (ellipsis mY) (list mX))
+                                      (seteq 'z))
+                mY)
+  (check-equal? (form-unbound-metavar (form-list #'_ '() (ellipsis mY) (list mX))
+                                      (seteq 'y))
+                mX))
+
 
 ;; -------------------
 ;; Languages
