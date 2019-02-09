@@ -13,16 +13,19 @@
 
 ;; =======================================================================================
 
-;; <terminal-spec> ::= [<id> ... ::= <pred-id>]
-;;                   | [<id> ... ::= <pred-id> #:compare <eq-id>]
+;; <terminal-spec> ::=
+;;     [<id> ... ::= <pred-id>]
+;;   | [<id> ... ::= <pred-id> #:compare <eq-id>]
+;;   | [<id> ... ::= [<symbol> ...]]
 
 (define-syntax-class terminal-spec
   #:datum-literals (::=)
-  #:attributes (value generate)
-  [pattern [mv:id ...+ ::= ~!
+  #:attributes (value generate [definitions 1])
+  [pattern [mv:id ...+ ::=
                   contract:id
                   {~optional {~seq #:compare equal:id}
                              #:defaults ([equal #'equal?])}]
+           #:with [definitions ...] #'[]
            #:attr value (τ/terminal-spec this-syntax
                                          (map syntax-e (@ mv))
                                          #'contract
@@ -31,7 +34,25 @@
            #`(τ/terminal-spec (quote-syntax #,this-syntax)
                               '(mv ...)
                               (quote-syntax contract)
-                              (quote-syntax equal))])
+                              (quote-syntax equal))]
+
+  [pattern [mv:id ...+ ::=
+                  [symbol:id ...]]
+           #:with [predicate-id] (generate-temporaries #'[∈?])
+           #:with [definitions ...]
+           #'[(define (predicate-id x)
+                (and (symbol? x)
+                     (or (eq? x 'symbol)
+                         ...)))]
+           #:attr value (τ/terminal-spec this-syntax
+                                         (map syntax-e (@ mv))
+                                         #'predicate-id
+                                         #'eq?)
+           #:with generate
+           #`(τ/terminal-spec (quote-syntax #,this-syntax)
+                              '(mv ...)
+                              (quote-syntax predicate-id)
+                              #'eq?)])
 
 ;; <form> ::= <id>
 ;;          | (<form> ...)
@@ -197,6 +218,13 @@
                                                      '()))
                             (list (τ/metavar _ 'm)
                                   (τ/metavar _ 'r))))
+
+  (check-parse terminal-spec
+               [binary ::= [+ - * /]]
+               (τ/terminal-spec _
+                                '(binary)
+                                (? identifier?)
+                                (free-id= eq?)))
 
   (check-parse form
                ()
