@@ -4,7 +4,8 @@
 
 (require
  racket/set
- racket/match)
+ racket/match
+ threading)
 
 ;; =======================================================================================
 
@@ -149,13 +150,56 @@
 ;; language ::=
 ;;   (language stx
 ;;             symbol
-;;             terminal-set
+;;             [listof terminal-spec]
 ;;             [listof nonterminal-spec])
+;;             [hash symbol => spec]
 (struct language
   [orig-stx
    name
    terminals
-   nonterminals])
+   nonterminals
+   metavar-spec-mapping])
+
+;; stx symbol [listof terminal-spec] [listof nonterminal-spec]
+;;  -> language
+(define (make-language stx name tms nts)
+
+  (define (extend-mapping m specs)
+    (for*/fold ([m m])
+               ([s (in-list specs)]
+                [x (in-list (spec-metavar-symbols s))])
+      (hash-set m x s)))
+
+  (language stx
+            name
+            tms
+            nts
+            (~>> (hasheq)
+                 (extend-mapping _ tms)
+                 (extend-mapping _ nts))))
+
+(module+ test
+
+  (define tm-xy (terminal-spec #'xy '(x y) #'symbol? #'eq?))
+  (define tm-ij (terminal-spec #'ij '(i j) #'integer? #'=))
+  (define nt-e (nonterminal-spec #'e
+                                 '(e)
+                                 (list
+                                  (production #'(num . i)
+                                              'num
+                                              (metavar #'i 'i)))))
+  (define L (make-language #'foo 'L (list tm-xy tm-ij) (list nt-e)))
+
+  (define (L-ref mv-symbol)
+    (hash-ref (language-metavar-spec-mapping L)
+              mv-symbol))
+
+  (check-eq? (L-ref 'x) tm-xy)
+  (check-eq? (L-ref 'y) tm-xy)
+  (check-eq? (L-ref 'i) tm-ij)
+  (check-eq? (L-ref 'j) tm-ij)
+  (check-eq? (L-ref 'e) nt-e))
+
 
 ;; language-delta ::=
 ;;   (language-delta stx

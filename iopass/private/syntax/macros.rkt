@@ -71,7 +71,8 @@
                [nts (list nt.generate ...)])
            (let ([mvs (check-spec-set-metavars (append tms nts))])
              (check-nonterminals nts mvs)
-             (language-definition (τ/language stx 'name tms nts)))))]))
+             (language-definition
+              (τ/make-language stx 'name tms nts)))))]))
 
 (module+ test
 
@@ -137,7 +138,7 @@
      (τ/language
       _
       'L0
-      _
+      (== (get-terminals #'T0))
       (list
        ;; [e ::= (num i) (op s e ...)]
        (τ/nonterminal-spec
@@ -163,7 +164,8 @@
                                          (list (τ/metavar _ 'x)
                                                (τ/metavar _ 'e))
                                          #f
-                                         '()))))))))
+                                         '())))))
+      _)))
 
   ;; =================================================================
 
