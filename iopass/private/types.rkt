@@ -5,6 +5,7 @@
 (require
  racket/set
  racket/match
+ racket/string
  threading)
 
 ;; =======================================================================================
@@ -15,6 +16,12 @@
 (struct spec
   [orig-stx
    metavar-symbols])
+
+;; spec -> string
+(define (spec-description s)
+  (string-join (map symbol->string
+                    (spec-metavar-symbols s))
+               "/"))
 
 ;; [listof spec] -> (or [setof symbol] spec-set-error)
 (define (spec-set-metavars ss)
@@ -33,6 +40,12 @@
   (require
    rackunit
    racket/match)
+
+  ;; ------------
+  ;; Test spec-description
+
+  (check-equal? (spec-description (terminal-spec 0 '(x) #'a #'b)) "x")
+  (check-equal? (spec-description (terminal-spec 0 '(x y) #'a #'b)) "x/y")
 
   ;; ------------
   ;; Test spec-set-metavars
