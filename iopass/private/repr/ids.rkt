@@ -20,11 +20,13 @@
 ;;   (production-repr-ids identifier identifier identifier)
 (struct language-repr-ids
   [nonterminal-predicates
-   productions])
+   productions]
+  #:transparent)
 (struct production-repr-ids
   [constructor-id
    predicate-id
-   accessor-id])
+   accessor-id]
+  #:transparent)
 
 ;; [listof nonterminal-spec]
 ;; [hasheq nonterminal-spec => identifier]
@@ -44,3 +46,44 @@
                  (production-repr-ids #'ctor #'pred #'proj))])))
 
   (language-repr-ids nt=>pred-id pr=>ids))
+
+;; =======================================================================================
+
+(module+ test
+  (require
+   rackunit
+   racket/match
+   "../syntax/util.rkt")
+
+  (define pr-a (production #'a 'a '...))
+  (define pr-b (production #'b 'b '...))
+  (define pr-c (production #'c 'c '...))
+  (define nt-x (nonterminal-spec #'x '(x) (list pr-a pr-b)))
+  (define nt-y (nonterminal-spec #'y '(y) (list pr-c)))
+
+  (define lr-ids
+    (make-language-repr-ids
+     (list nt-x nt-y)
+     (hasheq nt-x #'x?
+             nt-y #'y?)
+     (hasheq nt-x (list #'[a.ctor a.pred a.acc]
+                        #'[b.ctor b.pred b.acc])
+             nt-y (list #'[c.ctor c.pred c.acc]))))
+
+  (check-match (language-repr-ids-nonterminal-predicates lr-ids)
+               (hash-table [nt-x (free-id= x?)]
+                           [nt-y (free-id= y?)]))
+
+  (check-match (language-repr-ids-productions lr-ids)
+               (hash-table [pr-a (production-repr-ids
+                                  (free-id= a.ctor)
+                                  (free-id= a.pred)
+                                  (free-id= a.acc))]
+                           [pr-b (production-repr-ids
+                                  (free-id= b.ctor)
+                                  (free-id= b.pred)
+                                  (free-id= b.acc))]
+                           [pr-c (production-repr-ids
+                                  (free-id= c.ctor)
+                                  (free-id= c.pred)
+                                  (free-id= c.acc))])))
