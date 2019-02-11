@@ -15,7 +15,15 @@
 ;;   nonterminal-spec
 (struct spec
   [orig-stx
-   metavar-symbols])
+   metavar-symbols]
+  #:methods gen:custom-write
+  [(define (write-proc s port mode)
+     (fprintf port "#<~a:~a>"
+              (cond
+                [(nonterminal-spec? s) 'nonterminal-spec]
+                [(terminal-spec? s) 'terminal-spec]
+                [else 'spec])
+              (spec-description s)))])
 
 ;; spec -> string
 (define (spec-description s)
