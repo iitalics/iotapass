@@ -174,6 +174,7 @@
   (require
    rackunit
    racket/match
+   "util.rkt"
    (for-syntax racket/base))
 
   (define-syntax-rule (check-parse syntax-class
@@ -190,11 +191,6 @@
     (check-exn error-regex
                (λ () (syntax-parse (quote-syntax template)
                        [{~var || syntax-class} (void)]))))
-
-  (define-match-expander free-id=
-    (λ (stx)
-      (syntax-case stx ()
-        [(_ id) #'(== #'id free-identifier=?)])))
 
   ;; --------------------------------------
   ;; Test parsing
