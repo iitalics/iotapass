@@ -1,0 +1,91 @@
+#lang racket/base
+(provide
+ (struct-out field-repr)
+ form-field-count
+ form-field-repr)
+
+(require
+ "../types.rkt"
+ racket/match
+ threading)
+
+;; --------------------
+;; representation of forms as struct fields
+;; --------------------
+
+;; field-repr ::= (field-repr symbol nat)
+(struct field-repr
+  [metavar-symbol
+   ellipsis-depth]
+  #:transparent)
+
+;; form -> exact-integer
+;; Returns the number of fields in the representation of the given form.
+(define (form-field-count fm)
+  ;; [listof form] -> exact-integer
+  (define (count* fms)
+    (for/sum ([fm (in-list fms)])
+      (form-field-count fm)))
+  (match fm
+    [(metavar _ _) 1]
+    [(form-list _ before repeat after)
+     (+ (count* before)
+        (count* (ellipsis->list repeat))
+        (count* after))]))
+
+;; form -> [listof field-repr]
+;; Returns list of fields to represent the given form.
+(define (form-field-repr fm)
+  (reverse
+   (let repr/depth ([fm fm]
+                    [lst '()]
+                    [ed 0])
+
+     (define (repr fm lst)
+       (repr/depth fm lst ed))
+     (define (repr+1 fm lst)
+       (repr/depth fm lst (add1 ed)))
+
+     (match fm
+       [(metavar _ x)
+        (cons (field-repr x ed)
+              lst)]
+
+       [(form-list _ before repeat after)
+        (~> lst
+            (foldl repr   _ before)
+            (foldl repr+1 _ (ellipsis->list repeat))
+            (foldl repr   _ after))]))))
+
+;; =======================================================================================
+
+(module+ test
+  (require rackunit)
+
+  ;; (x y z ... [w])
+  (let ([fm (form-list 0
+                       (list (metavar 1 'x)
+                             (metavar 2 'y))
+                       (ellipsis (metavar 3 'z))
+                       (list (form-list 4
+                                        (list (metavar 5 'w))
+                                        #f
+                                        '())))])
+    (check-equal? (form-field-count fm) 4)
+    (check-equal? (form-field-repr fm)
+                  (list (field-repr 'x 0)
+                        (field-repr 'y 0)
+                        (field-repr 'z 1)
+                        (field-repr 'w 0))))
+
+  ;; ([x ...] ...)
+  (let ([fm (form-list 0
+                       '()
+                       (ellipsis (form-list 1
+                                            '()
+                                            (ellipsis (metavar 2 'x))
+                                            '()))
+                       '())])
+    (check-equal? (form-field-count fm) 1)
+    (check-equal? (form-field-repr fm)
+                  (list (field-repr 'x 2)))))
