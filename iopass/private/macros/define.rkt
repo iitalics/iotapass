@@ -8,6 +8,7 @@
   (prefix-in types: "../types.rkt")
   "../syntax/bindings.rkt"
   "../syntax/classes.rkt"
+  "../repr/ids.rkt"
   racket/base
   racket/match
   (rename-in syntax/parse [attribute @])))
@@ -24,18 +25,7 @@
          (format "metavariable '~a' defined multiple times" x)
          stx)]
       [mvs
-       mvs]))
-
-  ;; [listof nonterminal-spec] [setof metavar] -> void
-  ;; Raises syntax error if any nonterminals are malformed
-  (define (check-nonterminals nts metavars)
-    (for ([nt (in-list nts)])
-      (match (types:nonterminal-unbound-metavar nt metavars)
-        [#f (void)]
-        [(types:metavar stx x)
-         (raise-syntax-error #f
-           (format "metavariable unbound")
-           stx)]))))
+       mvs])))
 
 ;; ----------------------
 ;; define-terminals
@@ -66,13 +56,35 @@
      #:cut
      #:with :terminals-definition-binding #'terminals-id
      #`(define-syntax name
-         (let ([stx (quote-syntax #,this-syntax)]
-               [tms (get-terminals (quote-syntax terminals-id))]
-               [nts (list nt.generate ...)])
-           (let ([mvs (check-spec-set-metavars (append tms nts))])
-             (check-nonterminals nts mvs)
-             (language-definition
-              (types:make-language stx 'name tms nts)))))]))
+         (let ()
+           (define stx (quote-syntax #,this-syntax))
+           ; terminals
+           (define tms (get-terminals (quote-syntax terminals-id)))
+           ; nonterminals
+           (define nts (list nt.generate ...))
+           (define nt=>pred-id
+             (make-hasheq (map cons nts (list #'nt.pred-repr-id ...))))
+           (define nt=>repr-ids
+             (make-hasheq (map cons nts (list (list #'nt.prod-repr-ids ...) ...))))
+           ; all metavars
+           (define mvs (check-spec-set-metavars (append tms nts)))
+           ; ----
+           (check-nonterminals nts mvs)
+           (language-definition
+            (types:make-language stx 'name tms nts)
+            (make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))]))
+
+(begin-for-syntax
+  ;; [listof nonterminal-spec] [setof metavar] -> void
+  ;; Raises syntax error if any nonterminals are malformed
+  (define (check-nonterminals nts metavars)
+    (for ([nt (in-list nts)])
+      (match (types:nonterminal-unbound-metavar nt metavars)
+        [#f (void)]
+        [(types:metavar stx x)
+         (raise-syntax-error #f
+           (format "metavariable unbound")
+           stx)]))))
 
 (module+ test
 
@@ -165,7 +177,22 @@
                                                        (types:metavar _ 'e))
                                                  #f
                                                  '())))))
-      _)))
+      _))
+
+    (define (check-lang-repr-ids-hash-tables lang-id)
+      (define lang (get-language lang-id))
+      (match-define (language-repr-ids nt=>pred-id pr=>ids)
+        (get-language-repr-ids #'L0))
+      (for ([nt (in-list (types:language-nonterminals lang))])
+        (check-match (hash-ref nt=>pred-id nt)
+                     (? identifier?))
+        (for ([pr (in-list (types:nonterminal-spec-productions nt))])
+          (check-match (hash-ref pr=>ids pr)
+                       (production-repr-ids (? identifier?)
+                                            (? identifier?)
+                                            (? identifier?))))))
+
+    (check-lang-repr-ids-hash-tables #'L0))
 
   ;; =================================================================
 

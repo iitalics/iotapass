@@ -121,7 +121,11 @@
 ;;   [<id> ... ::= <production> ...]
 (define-syntax-class nonterminal-spec
   #:datum-literals (::=)
-  #:attributes ([mv 1] value generate)
+  #:attributes ([mv 1]              ; metavars
+                value               ; types:nonterminal-spec value
+                generate            ; types:nonterminal-spec generation syntax
+                pred-repr-id        ; predicate id in representation
+                [prod-repr-ids 1])  ; ids in representation of each production
   [pattern [mv:id ...+ ::= ~! prod:production ...]
            #:attr value (types:nonterminal-spec this-syntax
                                                 (map syntax-e (@ mv))
@@ -130,7 +134,10 @@
            #`(types:nonterminal-spec (quote-syntax #,this-syntax)
                                      '(mv ...)
                                      (list prod.generate
-                                           ...))])
+                                           ...))
+           #:with [pred-repr-id] (generate-temporaries #'[nt.pred])
+           #:with [prod-repr-ids ...] (for/list ([_ (in-list (@ prod))])
+                                        (generate-temporaries #'[pr.ctor pr.pred pr.proj]))])
 
 ;; <nonterminal-δ-spec> ::=
 ;;   [<id> ... += <production> ...

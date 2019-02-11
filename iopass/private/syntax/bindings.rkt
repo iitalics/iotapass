@@ -6,10 +6,10 @@
 
  language-definition
  language-definition-binding
- get-language)
+ get-language
+ get-language-repr-ids)
 
 (require
- "../types.rkt"
  syntax/parse)
 
 ;; =======================================================================================
@@ -39,22 +39,28 @@
    (syntax-local-value id)))
 
 ;; -----------
-;; (language-definition language)
+;; (language-definition language language-repr-ids)
 ;; For syntax bindings created by (define-language ....)
 
 (struct language-definition
-  [language]
+  [language
+   repr-ids]
   #:property prop:procedure not-an-expression-procedure)
 
 (define-syntax-class language-definition-binding
   #:description "language binding"
-  #:attributes (language)
+  #:attributes (language repr-ids)
   [pattern x:id
            #:do [(define lv (syntax-local-value #'x (λ () #f)))]
            #:when (language-definition? lv)
-           #:attr language (language-definition-language lv)])
+           #:attr language (language-definition-language lv)
+           #:attr repr-ids (language-definition-repr-ids lv)])
 
 ;; identifier -> language
 (define (get-language id)
   (language-definition-language
+   (syntax-local-value id)))
+
+(define (get-language-repr-ids id)
+  (language-definition-repr-ids
    (syntax-local-value id)))
