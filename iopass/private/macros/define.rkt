@@ -188,9 +188,9 @@
                      (? identifier?))
         (for ([pr (in-list (types:nonterminal-spec-productions nt))])
           (check-match (hash-ref pr=>ids pr)
-                       (production-repr-ids (? identifier?)
-                                            (? identifier?)
-                                            (? identifier?))))))
+                       (list (? identifier?)
+                             (? identifier?)
+                             (? identifier?))))))
 
     (check-lang-repr-ids-hash-tables #'L0))
 

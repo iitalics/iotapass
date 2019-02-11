@@ -1,7 +1,6 @@
 #lang racket/base
 (provide
  (struct-out language-repr-ids)
- (struct-out production-repr-ids)
  make-language-repr-ids)
 
 (require
@@ -15,17 +14,13 @@
 ;; language-repr-ids ::=
 ;;   (language-repr-ids
 ;;    [hasheq nonterminal-spec => identifier]
-;;    [hasheq production => production-repr-ids])
-;; production-repr-ids ::=
-;;   (production-repr-ids identifier identifier identifier)
+;;    [hasheq production => [list ctor-id pred-id proj-id]])
+;; ctor : [field-type ... -> production-type]
+;; pred : [any -> bool]
+;; proj : [production-type nat -> field-type]
 (struct language-repr-ids
-  [nonterminal-predicates
+  [predicates
    productions]
-  #:transparent)
-(struct production-repr-ids
-  [constructor-id
-   predicate-id
-   accessor-id]
   #:transparent)
 
 ;; [listof nonterminal-spec]
@@ -40,10 +35,7 @@
                   [(pr pr-ids) (in-parallel
                                 (in-list (nonterminal-spec-productions nt))
                                 (in-list (hash-ref nt=>repr-ids nt)))])
-      (syntax-parse pr-ids
-        [[ctor pred proj]
-         (values pr
-                 (production-repr-ids #'ctor #'pred #'proj))])))
+      (values pr (syntax->list pr-ids))))
 
   (language-repr-ids nt=>pred-id pr=>ids))
 
@@ -70,20 +62,17 @@
                         #'[b.ctor b.pred b.acc])
              nt-y (list #'[c.ctor c.pred c.acc]))))
 
-  (check-match (language-repr-ids-nonterminal-predicates lr-ids)
+  (check-match (language-repr-ids-predicates lr-ids)
                (hash-table [nt-x (free-id= x?)]
                            [nt-y (free-id= y?)]))
 
   (check-match (language-repr-ids-productions lr-ids)
-               (hash-table [pr-a (production-repr-ids
-                                  (free-id= a.ctor)
-                                  (free-id= a.pred)
-                                  (free-id= a.acc))]
-                           [pr-b (production-repr-ids
-                                  (free-id= b.ctor)
-                                  (free-id= b.pred)
-                                  (free-id= b.acc))]
-                           [pr-c (production-repr-ids
-                                  (free-id= c.ctor)
-                                  (free-id= c.pred)
-                                  (free-id= c.acc))])))
+               (hash-table [pr-a (list (free-id= a.ctor)
+                                       (free-id= a.pred)
+                                       (free-id= a.acc))]
+                           [pr-b (list (free-id= b.ctor)
+                                       (free-id= b.pred)
+                                       (free-id= b.acc))]
+                           [pr-c (list (free-id= c.ctor)
+                                       (free-id= c.pred)
+                                       (free-id= c.acc))])))
