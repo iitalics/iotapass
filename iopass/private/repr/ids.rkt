@@ -63,16 +63,17 @@
              nt-y (list #'[c.ctor c.pred c.acc]))))
 
   (check-match (language-repr-ids-predicates lr-ids)
-               (hash-table [nt-x (free-id= x?)]
-                           [nt-y (free-id= y?)]))
+               (hash-table [(== nt-x eq?) (free-id= x?)]
+                           [(== nt-y eq?) (free-id= y?)]))
 
   (check-match (language-repr-ids-productions lr-ids)
-               (hash-table [pr-a (list (free-id= a.ctor)
-                                       (free-id= a.pred)
-                                       (free-id= a.acc))]
-                           [pr-b (list (free-id= b.ctor)
-                                       (free-id= b.pred)
-                                       (free-id= b.acc))]
-                           [pr-c (list (free-id= c.ctor)
-                                       (free-id= c.pred)
-                                       (free-id= c.acc))])))
+               (hash-table
+                [(== pr-a eq?) (list (free-id= a.ctor)
+                                     (free-id= a.pred)
+                                     (free-id= a.acc))]
+                [(== pr-b eq?) (list (free-id= b.ctor)
+                                     (free-id= b.pred)
+                                     (free-id= b.acc))]
+                [(== pr-c eq?) (list (free-id= c.ctor)
+                                     (free-id= c.pred)
+                                     (free-id= c.acc))])))
