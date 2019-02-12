@@ -79,12 +79,12 @@
     (define nts (language-nonterminals lang))
     (define pr=>ids (language-repr-ids-productions lang-repr-ids))
 
-    (define/syntax-parse [[ctor-id pred-id proj-id] ...]
+    (define/syntax-parse [(ctor-id pred-id proj-id) ...]
       (for*/list ([nt (in-list nts)]
                   [pr (in-list (nonterminal-spec-productions nt))])
         (hash-ref pr=>ids pr)))
 
-    (define/syntax-parse [[name-sym field-count] ...]
+    (define/syntax-parse [(name-sym field-count) ...]
       (for*/list ([nt (in-list nts)]
                   [pr (in-list (nonterminal-spec-productions nt))])
         (match-define (production _ head-sym fm) pr)
@@ -101,12 +101,18 @@
   ;; language language-repr-ids
   ;; -> [stxlistof let-binding-syntax]
   (define (nonterminal-bindings lang lang-repr-ids)
-    (define/syntax-parse [pred-id ...]
-      (for/list ([nt (in-list (language-nonterminals lang))])
-        (hash-ref (language-repr-ids-predicates lang-repr-ids)
-                  nt)))
+    (define nt=>id (language-repr-ids-predicates lang-repr-ids))
+    (define pr=>ids (language-repr-ids-productions lang-repr-ids))
 
-    #'([pred-id (λ (x) 'WIP #f)]
+    (define/syntax-parse [(nt-pred-id [pr-pred-id ...]) ...]
+      (for/list ([nt (in-list (language-nonterminals lang))])
+        (list (hash-ref nt=>id nt)
+              (for/list ([pr (in-list (nonterminal-spec-productions nt))])
+                (cadr (hash-ref pr=>ids pr))))))
+
+    #'([nt-pred-id (λ (x)
+                     (or (pr-pred-id x)
+                         ...))]
        ...)))
 
 ;; the generate-structs macro is in a submodule so that it can access above functions at
@@ -216,6 +222,5 @@
 
     (check-match
      (syntax->datum (nonterminal-bindings L L-ids))
-     ; TODO: fill in implementation
-     `([xy? (λ (,_) ,_ ...)]
-       [z?  (λ (,_) ,_ ...)]))))
+     `([xy? (λ (x) (or (A? x) (B? x)))]
+       [z?  (λ (x) (or (C? x)))]))))
