@@ -204,6 +204,12 @@
                  (extend-mapping _ tms)
                  (extend-mapping _ nts))))
 
+;; language symbol -> (or #f spec)
+(define (language-lookup-metavar lang sym)
+  (hash-ref (language-metavar-spec-mapping lang)
+            sym
+            #f))
+
 (module+ test
 
   (define tm-xy (terminal-spec #'xy '(x y) #'symbol? #'eq?))
@@ -217,8 +223,7 @@
   (define L (make-language #'foo 'L (list tm-xy tm-ij) (list nt-e)))
 
   (define (L-ref mv-symbol)
-    (hash-ref (language-metavar-spec-mapping L)
-              mv-symbol))
+    (language-lookup-metavar L mv-symbol))
 
   (check-eq? (L-ref 'x) tm-xy)
   (check-eq? (L-ref 'y) tm-xy)
