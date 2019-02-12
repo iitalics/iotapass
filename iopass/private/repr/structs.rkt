@@ -66,6 +66,7 @@
 (module* generate-structs-helpers #f
   (provide (all-defined-out))
   (require
+   (for-template racket/base)
    "ids.rkt"
    "../syntax/bindings.rkt"
    (only-in racket/list append-map)
@@ -150,7 +151,7 @@
                                                (@ b.repr-ids))
        #:with nt-bindings (nonterminal-bindings (@ b.language)
                                                 (@ b.repr-ids))
-       #:with all-ids (in-language-repr-ids-all-ids (@ b.repr-ids))
+       #:with all-ids (language-repr-ids-all-ids (@ b.repr-ids))
        #'(let*-values pr-bindings
            (let nt-bindings
                (values . all-ids)))])))

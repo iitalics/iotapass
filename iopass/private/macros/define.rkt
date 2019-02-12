@@ -4,6 +4,7 @@
  define-language)
 
 (require
+ (submod "../repr/structs.rkt" generate-structs-macro)
  (for-syntax
   (prefix-in types: "../types.rkt")
   "../syntax/bindings.rkt"
@@ -49,30 +50,35 @@
 
 (define-syntax define-language
   (syntax-parser
-    [(_ name:id
+    [(_ language-name:id
         #:terminals terminals-id:id
         nt:nonterminal-spec
         ...)
      #:cut
      #:with :terminals-definition-binding #'terminals-id
-     #`(define-syntax name
-         (let ()
-           (define stx (quote-syntax #,this-syntax))
-           ; terminals
-           (define tms (get-terminals (quote-syntax terminals-id)))
-           ; nonterminals
-           (define nts (list nt.generate ...))
-           (define nt=>pred-id
-             (make-hasheq (map cons nts (list #'nt.pred-repr-id ...))))
-           (define nt=>repr-ids
-             (make-hasheq (map cons nts (list (list #'nt.prod-repr-ids ...) ...))))
-           ; all metavars
-           (define mvs (check-spec-set-metavars (append tms nts)))
-           ; ----
-           (check-nonterminals nts mvs)
-           (language-definition
-            (types:make-language stx 'name tms nts)
-            (make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))]))
+     #:with [[every-prod-repr-id ...] ...] #'[nt.prod-repr-ids ... ...]
+     #`(begin
+         (define-syntax language-name
+           (let ()
+             (define stx (quote-syntax #,this-syntax))
+             ; terminals
+             (define tms (get-terminals (quote-syntax terminals-id)))
+             ; nonterminals
+             (define nts (list nt.generate ...))
+             (define nt=>pred-id
+               (make-hasheq (map cons nts (list #'nt.pred-repr-id ...))))
+             (define nt=>repr-ids
+               (make-hasheq (map cons nts (list (list #'nt.prod-repr-ids ...) ...))))
+             ; all metavars
+             (define mvs (check-spec-set-metavars (append tms nts)))
+             ; ----
+             (check-nonterminals nts mvs)
+             (language-definition
+              (types:make-language stx 'language-name tms nts)
+              (make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))
+
+         (define-values [nt.pred-repr-id ... every-prod-repr-id ... ...]
+           (generate-structs language-name)))]))
 
 (begin-for-syntax
   ;; [listof nonterminal-spec] [setof metavar] -> void
