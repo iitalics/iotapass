@@ -1,13 +1,17 @@
 #lang racket/base
 (provide
  (struct-out language-repr-ids)
- make-language-repr-ids)
+ make-language-repr-ids
+ in-language-repr-ids-all-ids
+ language-repr-ids-all-ids)
 
 (require
  "../types.rkt"
  "../syntax/bindings.rkt"
  syntax/parse
- racket/match)
+ racket/match
+ (only-in racket/stream for/stream for*/stream)
+ (only-in racket/sequence sequence->list sequence-append))
 
 ;; =======================================================================================
 
@@ -27,7 +31,7 @@
 
 ;; [listof nonterminal-spec]
 ;; [hasheq nonterminal-spec => identifier]
-;; [hasheq nonterminal-spec => [listof #'[<id> <id> <id>]]]
+;; [hasheq nonterminal-spec => [list #'[<id> <id> <id>]]]
 ;; -> language-repr-ids
 (define (make-language-repr-ids nts
                                 nt=>pred-id
@@ -40,6 +44,31 @@
       (values pr (syntax->list pr-ids))))
 
   (language-repr-ids nts nt=>pred-id pr=>ids))
+
+;; language-repr-ids -> [sequenceof identifier]
+;; Return all associated identifiers, in a consistent order:
+;; Nonterminal ids first, then each id for each production, starting
+;; with all productions of the first nonterminal, then the next, etc.
+;;
+;; [nt_i ::= P_i_Mi ...] ...
+;; ==>
+;; (list nt_i-pred ...
+;;       P_i_j-ctor
+;;       P_i_j-pred
+;;       P_i_j-proj
+;;       ... ...)
+(define (in-language-repr-ids-all-ids lang-repr-ids)
+  (match-define (language-repr-ids nts nt=>id pr=>ids) lang-repr-ids)
+  (sequence-append (for/stream ([nt (in-list nts)])
+                     (hash-ref nt=>id nt))
+                   (for*/stream ([nt (in-list nts)]
+                                 [pr (in-list (nonterminal-spec-productions nt))]
+                                 [id (in-list (hash-ref pr=>ids pr))])
+                     id)))
+
+;; language-repr-ids -> [listof identifier]
+(define (language-repr-ids-all-ids lang-repr-ids)
+  (sequence->list (in-language-repr-ids-all-ids lang-repr-ids)))
 
 ;; =======================================================================================
 
@@ -78,4 +107,11 @@
                                      (free-id= b.acc))]
                 [(== pr-c eq?) (list (free-id= c.ctor)
                                      (free-id= c.pred)
-                                     (free-id= c.acc))])))
+                                     (free-id= c.acc))]))
+
+  (check-match (language-repr-ids-all-ids lr-ids)
+               (list (free-id= x?)
+                     (free-id= y?)
+                     (free-id= a.ctor) (free-id= a.pred) (free-id= a.acc)
+                     (free-id= b.ctor) (free-id= b.pred) (free-id= b.acc)
+                     (free-id= c.ctor) (free-id= c.pred) (free-id= c.acc))))
