@@ -146,14 +146,14 @@
   (define-syntax generate-structs
     (syntax-parser
       [(_ b:language-definition-binding)
-       #:with [pr-bind ...] (production-bindings (@ b.language)
-                                                 (@ b.repr-ids))
-       #:with [nt-bind ...] (nonterminal-bindings (@ b.language)
-                                                  (@ b.repr-ids))
-       #:with [id ...] (in-language-repr-ids-all-ids (@ b.repr-ids))
-       #'(let*-values (pr-bind ...)
-           (let (nt-bind ...)
-             (values id ...)))])))
+       #:with pr-bindings (production-bindings (@ b.language)
+                                               (@ b.repr-ids))
+       #:with nt-bindings (nonterminal-bindings (@ b.language)
+                                                (@ b.repr-ids))
+       #:with all-ids (in-language-repr-ids-all-ids (@ b.repr-ids))
+       #'(let*-values pr-bindings
+           (let nt-bindings
+               (values . all-ids)))])))
 
 ;; =======================================================================================
 
