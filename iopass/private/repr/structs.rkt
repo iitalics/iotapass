@@ -89,14 +89,19 @@
       (for*/list ([nt (in-list nts)]
                   [pr (in-list (nonterminal-spec-productions nt))])
         (match-define (production _ head-sym fm) pr)
-        (list (format-symbol "~a.~a" lang-name head-sym)
+        (define nt-name (spec-description nt))
+        (list (format-symbol "~a.~a.~a" lang-name nt-name head-sym)
               (form-field-count fm))))
 
-    #'([(_1 ctor-id pred-id proj-id _2)
-        (make-struct-type 'name-sym
-                          #f
-                          'field-count
-                          0)]
+    #`([(_1 ctor-id pred-id proj-id _2)
+        (make-struct-type 'name-sym     ; name
+                          #f            ; super
+                          'field-count  ; # fields
+                          0 #f '()      ; # auto, auto-v, props
+                          #f            ; inspector (#f = transparent)
+                          #f '() #f     ; proc-spec, immutables, guard
+                          'name-sym)]   ; ctor name
+
        ...))
 
   ;; language language-repr-ids
@@ -217,9 +222,9 @@
 
     (check-match
      (syntax->datum (production-bindings L L-ids))
-     '([(_1 A.c A? A.ref _2) (make-struct-type 'L.A #f '1 0)]
-       [(_1 B.c B? B.ref _2) (make-struct-type 'L.B #f '2 0)]
-       [(_1 C.c C? C.ref _2) (make-struct-type 'L.C #f '0 0)]))
+     `([(_1 A.c A? A.ref _2) (make-struct-type 'L.x/y.A #f '1 ,_ ...)]
+       [(_1 B.c B? B.ref _2) (make-struct-type 'L.x/y.B #f '2 ,_ ...)]
+       [(_1 C.c C? C.ref _2) (make-struct-type 'L.z.C   #f '0 ,_ ...)]))
 
     (check-match
      (syntax->datum (nonterminal-bindings L L-ids))
