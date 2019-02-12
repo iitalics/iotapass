@@ -13,13 +13,15 @@
 
 ;; language-repr-ids ::=
 ;;   (language-repr-ids
+;;    [listof nonterminal-spec]
 ;;    [hasheq nonterminal-spec => identifier]
 ;;    [hasheq production => [list ctor-id pred-id proj-id]])
 ;; ctor : [field-type ... -> production-type]
 ;; pred : [any -> bool]
 ;; proj : [production-type nat -> field-type]
 (struct language-repr-ids
-  [predicates
+  [nonterminals
+   predicates
    productions]
   #:transparent)
 
@@ -37,7 +39,7 @@
                                 (in-list (hash-ref nt=>repr-ids nt)))])
       (values pr (syntax->list pr-ids))))
 
-  (language-repr-ids nt=>pred-id pr=>ids))
+  (language-repr-ids nts nt=>pred-id pr=>ids))
 
 ;; =======================================================================================
 

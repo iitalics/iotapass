@@ -181,7 +181,7 @@
 
     (define (check-lang-repr-ids-hash-tables lang-id)
       (define lang (get-language lang-id))
-      (match-define (language-repr-ids nt=>pred-id pr=>ids)
+      (match-define (language-repr-ids _ nt=>pred-id pr=>ids)
         (get-language-repr-ids #'L0))
       (for ([nt (in-list (types:language-nonterminals lang))])
         (check-match (hash-ref nt=>pred-id nt)
