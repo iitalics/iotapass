@@ -7,27 +7,30 @@
   racket/base
   racket/match
   (rename-in syntax/parse [attribute @])
+  (prefix-in c: "../syntax/classes.rkt")
   "../syntax/bindings.rkt"
   "../repr/ids.rkt"
   "../ast/decl.rkt"))
 
 (begin-for-syntax
-  ;; language id id -> production
-  (define (get-prod lang mv-id head-id)
-    (define nt
-      (match (language-lookup-metavar lang
-                                      (syntax-e mv-id))
-        [(? nonterminal-spec? nt) nt]
-        [_ (raise-syntax-error #f
-             "metavar does not refer to a nonterminal"
-             mv-id)]))
-    (match (findf (λ (pr) (eq? (production-head-symbol pr)
-                               (syntax-e head-id)))
-                  (nonterminal-spec-productions nt))
-      [#f (raise-syntax-error #f
-            "production not defined by nonterminal"
-            head-id)]
-      [pr pr]))
+  (define-syntax-class lang+nt
+    #:description "nonterminal name"
+    #:attributes (language repr-ids nonterminal)
+    [pattern (:language-definition-binding mv)
+             #:declare mv (c:nonterminal-metavar-id (@ language))
+             #:attr nonterminal (@ mv.spec)])
+
+  (define-syntax-class (known-production-id nt)
+    #:description "known production head symbol"
+    #:attributes (production)
+    [pattern head:id
+             #:attr production
+             (findf (λ (pr) (eq? (production-head-symbol pr)
+                                 (syntax-e #'head)))
+                    (nonterminal-spec-productions nt))
+             #:fail-unless (@ production)
+             (format "not a production of nonterminal '~a'"
+                     (spec-description nt))])
 
   (define-splicing-syntax-class raw-function
     #:attributes (fun)
@@ -41,12 +44,12 @@
 
 (define-syntax raw-prod
   (syntax-parser
-    [(_ (b:language-definition-binding mv:id)
+    [(_ :lang+nt
         f:raw-function
-        (head:id arg ...))
-     #:do [(define pr=>ids (language-repr-ids-productions (@ b.repr-ids)))
-           (define pr (get-prod (@ b.language) #'mv #'head))]
-     #:with [ct pr pj] (hash-ref pr=>ids pr)
+        (head arg ...))
+     #:declare head (known-production-id (@ nonterminal))
+     #:with [ct pr pj] (hash-ref (language-repr-ids-productions (@ repr-ids))
+                                 (@ head.production))
      (match (@ f.fun)
        ['ctor #'(ct arg ...)]
        ['pred #'(pr arg ...)]
