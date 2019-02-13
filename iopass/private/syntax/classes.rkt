@@ -1,16 +1,26 @@
 #lang racket/base
 (provide
+ ; for definitions
  terminal-spec
  nonterminal-spec
  production
- form)
+ form
+ ; for templates
+ terminal-template
+ nonterminal-template
+ #;
+ form-template)
 
 (require
  (prefix-in ast: "../ast/decl.rkt")
+ (prefix-in ast:t: "../ast/template.rkt")
  (for-template racket/base)
- (rename-in syntax/parse [attribute @]))
+ (rename-in syntax/parse [attribute @])
+ racket/match)
 
-;; =======================================================================================
+;; -------------------------------------------
+;; syntax classes for define- macros
+;; -------------------------------------------
 
 ;; <terminal-spec> ::=
 ;;     [<id> ... ::= <pred-id>]
@@ -119,3 +129,75 @@
 ;;             -= <production> ...
 ;;             ...]
 ;; (TODO LATER)
+
+;; -------------------------------------------
+;; syntax classes for 'template' macros
+;; -------------------------------------------
+
+;; <terminal-template> ::=
+;;   (unquote <expr>)
+;;   <datum>
+;;
+;; <nonterminal-template> ::=
+;;   (unquote <expr>)
+;;   (<head-sym> . <form-template>)
+;;
+;; <form-list-template> ::=
+;;   (<form-template> ...)
+;;   (<form-template> ... <form-template> ooo <form-template> ...)
+;;
+;; <form-template> ::=
+;;   <terminal-template>     if 'fm' is a terminal metavar
+;;   <nonterminal-template>  if 'fm' is a nonterminal metavar
+;;   <form-list-template>    if 'fm' is a form-list
+
+;; tm : ast:terminal-spec
+;; (@ value) : ast:t:template-node
+(define-syntax-class (terminal-template tm)
+  #:description (format "terminal '~a' template"
+                        (ast:spec-description tm))
+  #:attributes (value)
+  [pattern ({~datum unquote} e)
+           #:attr value (ast:t:unquoted #'e)]
+  [pattern d
+           #:attr value (ast:t:datum #'d)])
+
+;; lang : ast:language
+;; nt : ast:nonterminal-spec
+;; (@ value) : ast:t:template
+(define-syntax-class (nonterminal-template lang nt)
+  #:description (format "nonterminal '~a' template"
+                        (ast:spec-description nt))
+  #:attributes (value)
+  [pattern ({~datum unquote} e)
+           #:attr value (ast:t:unquoted #'e)]
+
+  #;
+  [pattern (head:id . body-tm)
+           #:attr value ('???)])
+
+;; lang : ast:language
+;; nt : ast:nonterminal-spec
+;; (@ value) : [listof ast:t:template]
+(define-syntax-class (form-list-template lang fl)
+  #:description "parenthesized list template"
+  #:attributes (value)
+  [pattern ()
+           #:attr value '()])
+
+#;
+;; lang : ast:language
+;; fm : ast:form
+;; (@ value) : [listof ast:t:template]
+(define-syntax-class (form-template lang fm)
+  #:description "template"
+  #:attributes (value)
+  [pattern _
+           #:attr value
+           (match fm
+             [(ast:metavar _ mv)
+              ('???)]
+             [(ast:form-list _ before repeat after)
+              ('???)])
+           #:fail-when (form-template-error? (@ value))
+           (form-template-error-msg (@ value))])

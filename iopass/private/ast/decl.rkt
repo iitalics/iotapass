@@ -114,7 +114,7 @@
 ;;              [listof form])
 (struct form [orig-stx] #:transparent)
 (struct metavar form [symbol] #:transparent)
-(struct form-list form [before middle after] #:transparent)
+(struct form-list form [before repeat after] #:transparent)
 (struct ellipsis [repeated-form] #:transparent)
 
 ;; (or #f ellipsis) -> [listof form]
