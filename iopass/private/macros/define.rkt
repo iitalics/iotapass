@@ -6,10 +6,10 @@
 (require
  (submod "../repr/structs.rkt" generate-structs-macro)
  (for-syntax
-  (prefix-in types: "../types.rkt")
+  (prefix-in ast: "../ast/decl.rkt")
+  (prefix-in repr: "../repr/ids.rkt")
   "../syntax/bindings.rkt"
   "../syntax/classes.rkt"
-  "../repr/ids.rkt"
   racket/base
   racket/match
   (rename-in syntax/parse [attribute @])))
@@ -20,8 +20,8 @@
   ;; [listof spec] -> [listof symbol]
   ;; Raises syntax error if any metavars are repeated
   (define (check-spec-set-metavars ss)
-    (match (types:spec-set-metavars ss)
-      [(types:spec-repeated-metavar-error stx x)
+    (match (ast:spec-set-metavars ss)
+      [(ast:spec-repeated-metavar-error stx x)
        (raise-syntax-error #f
          (format "metavariable '~a' defined multiple times" x)
          stx)]
@@ -74,8 +74,8 @@
              ; ----
              (check-nonterminals nts mvs)
              (language-definition
-              (types:make-language stx 'language-name tms nts)
-              (make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))
+              (ast:make-language stx 'language-name tms nts)
+              (repr:make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))
 
          (define-values [nt.pred-repr-id ... every-prod-repr-id ... ...]
            (generate-structs language-name)))]))
@@ -85,9 +85,9 @@
   ;; Raises syntax error if any nonterminals are malformed
   (define (check-nonterminals nts metavars)
     (for ([nt (in-list nts)])
-      (match (types:nonterminal-unbound-metavar nt metavars)
+      (match (ast:nonterminal-unbound-metavar nt metavars)
         [#f (void)]
-        [(types:metavar stx x)
+        [(ast:metavar stx x)
          (raise-syntax-error #f
            (format "metavariable unbound")
            stx)]))))
@@ -147,52 +147,52 @@
 
     (check-match
      (get-terminals #'T0)
-     (list (types:terminal-spec _ '(i j) _ _)
-           (types:terminal-spec _ '(x y) _ _)
-           (types:terminal-spec _ '(s) _ _)))
+     (list (ast:terminal-spec _ '(i j) _ _)
+           (ast:terminal-spec _ '(x y) _ _)
+           (ast:terminal-spec _ '(s) _ _)))
 
     (check-match
      (get-language #'L0)
-     (types:language
+     (ast:language
       _
       'L0
       (== (get-terminals #'T0))
       (list
        ;; [e ::= (num i) (op s e ...)]
-       (types:nonterminal-spec
+       (ast:nonterminal-spec
         _
         '(e)
-        (list (types:production _
-                                'num
-                                (types:form-list _ (list (types:metavar _ 'i)) #f '()))
-              (types:production _
-                                'op
-                                (types:form-list _
-                                                 (list (types:metavar _ 's))
-                                                 (types:ellipsis (types:metavar _ 'e))
-                                                 '()))))
+        (list (ast:production _
+                              'num
+                              (ast:form-list _ (list (ast:metavar _ 'i)) #f '()))
+              (ast:production _
+                              'op
+                              (ast:form-list _
+                                             (list (ast:metavar _ 's))
+                                             (ast:ellipsis (ast:metavar _ 'e))
+                                             '()))))
 
        ;; [df ::= (def x e)]
-       (types:nonterminal-spec
+       (ast:nonterminal-spec
         _
         '(df)
-        (list (types:production _
-                                'def
-                                (types:form-list _
-                                                 (list (types:metavar _ 'x)
-                                                       (types:metavar _ 'e))
-                                                 #f
-                                                 '())))))
+        (list (ast:production _
+                              'def
+                              (ast:form-list _
+                                             (list (ast:metavar _ 'x)
+                                                   (ast:metavar _ 'e))
+                                             #f
+                                             '())))))
       _))
 
     (define (check-lang-repr-ids-hash-tables lang-id)
       (define lang (get-language lang-id))
-      (match-define (language-repr-ids _ nt=>pred-id pr=>ids)
+      (match-define (repr:language-repr-ids _ nt=>pred-id pr=>ids)
         (get-language-repr-ids #'L0))
-      (for ([nt (in-list (types:language-nonterminals lang))])
+      (for ([nt (in-list (ast:language-nonterminals lang))])
         (check-match (hash-ref nt=>pred-id nt)
                      (? identifier?))
-        (for ([pr (in-list (types:nonterminal-spec-productions nt))])
+        (for ([pr (in-list (ast:nonterminal-spec-productions nt))])
           (check-match (hash-ref pr=>ids pr)
                        (list (? identifier?)
                              (? identifier?)
@@ -210,7 +210,7 @@
       [(_ b:terminals-definition-binding)
        #:with [e ...] (for/list ([t (in-list (@ b.terminals))])
                         (match t
-                          [(types:terminal-spec _ mvs p e)
+                          [(ast:terminal-spec _ mvs p e)
                            #`(list '#,mvs #,p #,e)]))
        #'(list e ...)]))
 

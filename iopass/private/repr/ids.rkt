@@ -6,7 +6,7 @@
  language-repr-ids-all-ids)
 
 (require
- "../types.rkt"
+ "../ast/decl.rkt"
  "../syntax/bindings.rkt"
  syntax/parse
  racket/match

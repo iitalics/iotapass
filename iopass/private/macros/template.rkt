@@ -9,7 +9,7 @@
   (rename-in syntax/parse [attribute @])
   "../syntax/bindings.rkt"
   "../repr/ids.rkt"
-  "../types.rkt"))
+  "../ast/decl.rkt"))
 
 (begin-for-syntax
   ;; language id id -> production

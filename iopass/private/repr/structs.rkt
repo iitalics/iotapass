@@ -5,7 +5,7 @@
  form-field-repr)
 
 (require
- "../types.rkt"
+ "../ast/decl.rkt"
  racket/match
  threading)
 

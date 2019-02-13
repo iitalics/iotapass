@@ -6,7 +6,7 @@
  form)
 
 (require
- (prefix-in types: "../types.rkt")
+ (prefix-in ast: "../ast/decl.rkt")
  (for-template racket/base)
  (rename-in syntax/parse [attribute @]))
 
@@ -26,10 +26,10 @@
                              #:defaults ([equal #'equal?])}]
            #:with [definitions ...] #'[]
            #:with generate
-           #`(types:terminal-spec (quote-syntax #,this-syntax)
-                                  '(mv ...)
-                                  (quote-syntax contract)
-                                  (quote-syntax equal))]
+           #`(ast:terminal-spec (quote-syntax #,this-syntax)
+                                '(mv ...)
+                                (quote-syntax contract)
+                                (quote-syntax equal))]
 
   [pattern [mv:id ...+ ::=
                   [symbol:id ...]]
@@ -40,10 +40,11 @@
                      (or (eq? x 'symbol)
                          ...)))]
            #:with generate
-           #`(types:terminal-spec (quote-syntax #,this-syntax)
-                                  '(mv ...)
-                                  (quote-syntax predicate-id)
-                                  #'eq?)])
+           #`(ast:terminal-spec (quote-syntax #,this-syntax)
+                                '(mv ...)
+                                (quote-syntax predicate-id)
+                                #'eq?)])
+
 ;; <form> ::= <id>
 ;;          | (<form> ...)
 ;;          | (<form> ...
@@ -60,21 +61,21 @@
            #:fail-when (eq? (syntax-e #'mv) '...)
            "unexpected ellipsis"
            #:with generate
-           #`(types:metavar (quote-syntax #,this-syntax) 'mv)]
+           #`(ast:metavar (quote-syntax #,this-syntax) 'mv)]
 
   [pattern (a:form ... b:form :ooo c:form ...)
            #:with generate
-           #`(types:form-list (quote-syntax #,this-syntax)
-                              (list a.generate ...)
-                              (types:ellipsis b.generate)
-                              (list c.generate ...))]
+           #`(ast:form-list (quote-syntax #,this-syntax)
+                            (list a.generate ...)
+                            (ast:ellipsis b.generate)
+                            (list c.generate ...))]
 
   [pattern (a:form ...)
            #:with generate
-           #`(types:form-list (quote-syntax #,this-syntax)
-                              (list a.generate ...)
-                              #f
-                              '())]
+           #`(ast:form-list (quote-syntax #,this-syntax)
+                            (list a.generate ...)
+                            #f
+                            '())]
 
   [pattern (:ooo . _)
            #:fail-when #t
@@ -91,24 +92,24 @@
   #:attributes (generate)
   [pattern (head:id . form:form)
            #:with generate
-           #`(types:production (quote-syntax #,this-syntax)
-                           'head
-                           form.generate)])
+           #`(ast:production (quote-syntax #,this-syntax)
+                             'head
+                             form.generate)])
 
 ;; <nonterminal-spec> ::=
 ;;   [<id> ... ::= <production> ...]
 (define-syntax-class nonterminal-spec
   #:datum-literals (::=)
   #:attributes ([mv 1]              ; metavars
-                generate            ; types:nonterminal-spec generation syntax
+                generate            ; nonterminal-spec generation syntax
                 pred-repr-id        ; predicate id in representation
                 [prod-repr-ids 1])  ; ids in representation of each production
   [pattern [mv:id ...+ ::= ~! prod:production ...]
            #:with generate
-           #`(types:nonterminal-spec (quote-syntax #,this-syntax)
-                                     '(mv ...)
-                                     (list prod.generate
-                                           ...))
+           #`(ast:nonterminal-spec (quote-syntax #,this-syntax)
+                                   '(mv ...)
+                                   (list prod.generate
+                                         ...))
            #:with [pred-repr-id] (generate-temporaries #'[nt.pred])
            #:with [prod-repr-ids ...] (for/list ([_ (in-list (@ prod))])
                                         (generate-temporaries #'[pr.ctor pr.pred pr.proj]))])
