@@ -5,6 +5,10 @@
  nonterminal-spec
  production
  form
+ ; for templates or patterns
+ known-metavar-id
+ nonterminal-metavar-id
+ terminal-metavar-id
  ; for templates
  terminal-template
  nonterminal-template
@@ -19,7 +23,7 @@
  racket/match)
 
 ;; -------------------------------------------
-;; syntax classes for define- macros
+;; patterns for define- macros
 ;; -------------------------------------------
 
 ;; <terminal-spec> ::=
@@ -131,7 +135,61 @@
 ;; (TODO LATER)
 
 ;; -------------------------------------------
-;; syntax classes for 'template' macros
+;; patterns for 'template' or 'pattern' macros
+;; -------------------------------------------
+
+(define-syntax-class (known-metavar-id lang)
+  #:attributes (spec)
+  #:description "known metavariable"
+  [pattern x:id
+           #:attr spec (ast:language-lookup-metavar lang
+                                                    (syntax-e #'x))
+           #:fail-unless (@ spec)
+           "metavariable not defined by language"])
+
+(define-syntax-class (nonterminal-metavar-id lang)
+  #:attributes (spec)
+  #:description "nonterminal metavariable"
+  [pattern {~var || (known-metavar-id lang)}
+           #:fail-unless (ast:nonterminal-spec? (@ spec)) #f])
+
+(define-syntax-class (terminal-metavar-id lang)
+  #:attributes (spec)
+  #:description "terminal metavariable"
+  [pattern {~var || (known-metavar-id lang)}
+           #:fail-unless (ast:terminal-spec? (@ spec)) #f])
+
+(module+ test
+  (require rackunit)
+
+  (let* ([tm-x (ast:terminal-spec #'x '(x) #'symbol? #'eq?)]
+         [nt-e (ast:nonterminal-spec #'e '(e) '())]
+         [L (ast:make-language
+             #'L
+             'L
+             (list tm-x)
+             (list nt-e))])
+
+    (syntax-parse #'[x e]
+      [[{~var X (known-metavar-id L)}
+        {~var E (known-metavar-id L)}]
+       (check-eq? (@ X.spec) tm-x)
+       (check-eq? (@ E.spec) nt-e)])
+
+    (check-exn #px"metavariable not defined"
+               (λ () (syntax-parse #'y
+                       [{~var Y (known-metavar-id L)} 0])))
+
+    (check-exn #px"expected nonterminal metavariable"
+               (λ () (syntax-parse #'x
+                       [{~var X (nonterminal-metavar-id L)} 0])))
+
+    (check-exn #px"expected terminal metavariable"
+               (λ () (syntax-parse #'e
+                       [{~var E (terminal-metavar-id L)} 0])))))
+
+;; -------------------------------------------
+;; patterns for 'template' macros
 ;; -------------------------------------------
 
 ;; <terminal-template> ::=
