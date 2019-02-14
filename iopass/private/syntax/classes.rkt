@@ -196,19 +196,6 @@
 ;;   (unquote <expr>)
 ;;   <datum>
 ;;
-;; <nonterminal-template> ::=
-;;   (unquote <expr>)
-;;   (<head-sym> . <form-template>)
-;;
-;; <form-list-template> ::=
-;;   (<form-template> ...)
-;;   (<form-template> ... <form-template> ooo <form-template> ...)
-;;
-;; <form-template> ::=
-;;   <terminal-template>     if 'fm' is a terminal metavar
-;;   <nonterminal-template>  if 'fm' is a nonterminal metavar
-;;   <form-list-template>    if 'fm' is a form-list
-
 ;; tm : ast:terminal-spec
 ;; (@ value) : ast:t:template-node
 (define-syntax-class (terminal-template tm)
@@ -218,12 +205,17 @@
   [pattern ({~datum unquote} e)
            #:attr value (ast:t:unquoted #'e)]
   [pattern d
+           #:fail-when (or (null? (syntax-e #'d)) (pair? (syntax-e #'d)))
+           "list datum not allowed"
            #:attr value (ast:t:datum #'d)])
 
-;; lang : ast:language
+;; <nonterminal-template> ::=
+;;   (unquote <expr>)
+;;   (<head-sym> . <form-template>)
+;;
 ;; nt : ast:nonterminal-spec
 ;; (@ value) : ast:t:template
-(define-syntax-class (nonterminal-template lang nt)
+(define-syntax-class (nonterminal-template nt)
   #:description (format "nonterminal '~a' template"
                         (ast:spec-description nt))
   #:attributes (value)
@@ -234,6 +226,10 @@
   [pattern (head:id . body-tm)
            #:attr value ('???)])
 
+;; <form-list-template> ::=
+;;   (<form-template> ...)
+;;   (<form-template> ... <form-template> ooo <form-template> ...)
+;;
 ;; lang : ast:language
 ;; nt : ast:nonterminal-spec
 ;; (@ value) : [listof ast:t:template]
@@ -244,6 +240,11 @@
            #:attr value '()])
 
 #;
+;; <form-template> ::=
+;;   <terminal-template>     if 'fm' is a terminal metavar
+;;   <nonterminal-template>  if 'fm' is a nonterminal metavar
+;;   <form-list-template>    if 'fm' is a form-list
+;;
 ;; lang : ast:language
 ;; fm : ast:form
 ;; (@ value) : [listof ast:t:template]
@@ -259,3 +260,29 @@
               ('???)])
            #:fail-when (form-template-error? (@ value))
            (form-template-error-msg (@ value))])
+
+;; =======================================================================================
+
+(module+ test
+  (require
+   (for-syntax racket/base)
+   syntax/parse/define
+   rackunit
+   "util.rkt")
+
+  (define-simple-macro (syntax-class-attr input sc attr)
+    #:with nil (datum->syntax this-syntax '||)
+    (syntax-parse input
+      [{~var nil sc} (@ attr)]))
+
+  ;; ---------
+
+  (define tm-xy (ast:terminal-spec #'x/y '(x y) #'symbol? #'eq?))
+
+  (define (parse-tm-xy stx)
+    (syntax-class-attr stx (terminal-template tm-xy) value))
+
+  (check-match (parse-tm-xy #',foo) (ast:t:unquoted (free-id= foo)))
+  (check-match (parse-tm-xy #'foo) (ast:t:datum (free-id= foo)))
+  (check-exn #px"list datum not allowed" (λ () (parse-tm-xy #'(foo bar))))
+  (check-exn #px"list datum not allowed" (λ () (parse-tm-xy #'()))))
