@@ -28,18 +28,6 @@
              #:declare mv (c:nonterminal-metavar-id (@ language))
              #:attr nonterminal (@ mv.spec)])
 
-  (define-syntax-class (known-production-id nt)
-    #:description "known production head symbol"
-    #:attributes (production)
-    [pattern head:id
-             #:attr production
-             (findf (λ (pr) (eq? (production-head-symbol pr)
-                                 (syntax-e #'head)))
-                    (nonterminal-spec-productions nt))
-             #:fail-unless (@ production)
-             (format "not a production of nonterminal '~a'"
-                     (spec-description nt))])
-
   (define-splicing-syntax-class raw-function
     #:attributes (fun)
     [pattern {~seq} #:attr fun 'ctor]
@@ -55,7 +43,7 @@
     [(_ :lang+nt
         f:raw-function
         (head arg ...))
-     #:declare head (known-production-id (@ nonterminal))
+     #:declare head (c:known-production-id (@ nonterminal))
      #:with [ct pr pj] (hash-ref (language-repr-ids-productions (@ repr-ids))
                                  (@ head.production))
      (match (@ f.fun)

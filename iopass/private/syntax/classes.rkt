@@ -9,6 +9,7 @@
  known-metavar-id
  nonterminal-metavar-id
  terminal-metavar-id
+ known-production-id
  ; for templates
  terminal-template
  nonterminal-template
@@ -158,6 +159,15 @@
   #:description "terminal metavariable"
   [pattern {~var || (known-metavar-id lang)}
            #:fail-unless (ast:terminal-spec? (@ spec)) #f])
+
+(define-syntax-class (known-production-id nt)
+  #:description "known production head symbol"
+  #:attributes (production)
+  [pattern head:id
+           #:attr production (ast:nonterminal-production nt (syntax-e #'head))
+           #:fail-unless (@ production)
+           (format "not a production of nonterminal '~a'"
+                   (ast:spec-description nt))])
 
 (module+ test
   (require rackunit)
