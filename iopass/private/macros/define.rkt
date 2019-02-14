@@ -77,12 +77,10 @@
               (ast:make-language stx 'language-name tms nts)
               (repr:make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))
 
-         (define-values [nt.pred-repr-id ... every-prod-repr-id ... ...]
-           (with-generate-structs [#:lang language-name
-                                   #:nt-ids [nt.pred-repr-id ...]
-                                   #:pr-ids [(nt.prod-repr-ids ...) ...]]
-             (values nt.pred-repr-id ...
-                     every-prod-repr-id ... ...))))]))
+         (generate-structs
+          #:lang language-name
+          #:nt-ids [nt.pred-repr-id ...]
+          #:pr-ids [(nt.prod-repr-ids ...) ...]))]))
 
 (begin-for-syntax
   ;; [listof nonterminal-spec] [setof metavar] -> void

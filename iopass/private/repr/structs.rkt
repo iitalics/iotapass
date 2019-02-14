@@ -118,30 +118,27 @@
 ;; phase 1
 (module* generate-structs-macro racket/base
   (provide
-   with-generate-structs)
+   generate-structs)
 
   (require
    (for-syntax
     racket/base
     (rename-in syntax/parse [attribute @])
     (submod ".." generate-structs-helpers)
-    "../syntax/bindings.rkt"
-    "ids.rkt"))
+    "../syntax/bindings.rkt"))
 
-  (define-syntax with-generate-structs
+  (define-syntax generate-structs
     (syntax-parser
-      [(_ [#:lang :language-definition-binding
-           #:nt-ids [nt?:id ...]
-           #:pr-ids [({~and pr-triple [pr-c:id pr-p:id pr-j:id]}
-                      ...)
-                     ...]]
-          body ...)
-       #`(let-values ()
+      [(_ #:lang :language-definition-binding
+          #:nt-ids [nt?:id ...]
+          #:pr-ids [({~and pr-triple [pr-c:id pr-p:id pr-j:id]}
+                     ...)
+                    ...])
+       #`(begin
            #,@(production-structure-defs (@ language)
                                          (@ pr-triple))
            #,@(nonterminal-predicate-defs (@ nt?)
-                                          (@ pr-c))
-           body ...)])))
+                                          (@ pr-c)))])))
 
 ;; =======================================================================================
 
