@@ -7,7 +7,5 @@
 ;; template ::=
 ;;   (unquoted expr-syntax)
 ;;   (datum datum-syntax)
-;;   (ellipsis template)
-(struct unquoted [stx])
-(struct datum [stx])
-(struct ellipsis [template])
+(struct unquoted [stx] #:transparent)
+(struct datum [stx] #:transparent)
