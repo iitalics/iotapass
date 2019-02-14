@@ -270,29 +270,3 @@
               ('???)])
            #:fail-when (form-template-error? (@ value))
            (form-template-error-msg (@ value))])
-
-;; =======================================================================================
-
-(module+ test
-  (require
-   (for-syntax racket/base)
-   syntax/parse/define
-   rackunit
-   "util.rkt")
-
-  (define-simple-macro (syntax-class-attr input sc attr)
-    #:with nil (datum->syntax this-syntax '||)
-    (syntax-parse input
-      [{~var nil sc} (@ attr)]))
-
-  ;; ---------
-
-  (define tm-xy (ast:terminal-spec #'x/y '(x y) #'symbol? #'eq?))
-
-  (define (parse-tm-xy stx)
-    (syntax-class-attr stx (terminal-template tm-xy) value))
-
-  (check-match (parse-tm-xy #',foo) (ast:t:unquoted (free-id= foo)))
-  (check-match (parse-tm-xy #'foo) (ast:t:datum (free-id= foo)))
-  (check-exn #px"list datum not allowed" (λ () (parse-tm-xy #'(foo bar))))
-  (check-exn #px"list datum not allowed" (λ () (parse-tm-xy #'()))))

@@ -82,6 +82,7 @@
 (module+ test
   (require
    rackunit
+   syntax/macro-testing
    "define.rkt")
 
   (define-terminals T
@@ -121,7 +122,15 @@
   ;; 'template' tests
   ;; ---------------
 
+  ; unquoted
   (check-eqv? (template (L i) ,(+ 5 6)) 11)
+  (check-eq? (template (L e) ,e-5) e-5)
+  ; datum
   (check-eqv? (template (L i) 5)  5)
   (check-eq? (template (L x) foo) 'foo)
-  (check-eq? (template (L e) ,e-5) e-5))
+  (check-exn #px"list datum not allowed"
+             (λ () (convert-compile-time-error
+                    (template (L i) (1 2)))))
+  (check-exn #px"list datum not allowed"
+             (λ () (convert-compile-time-error
+                    (template (L i) ())))))
