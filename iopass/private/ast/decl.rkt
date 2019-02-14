@@ -116,6 +116,22 @@
              (nonterminal-spec-productions nt))
       (fail-proc)))
 
+(module+ test
+  ;; -------
+  ;; Test nonterminal-production
+  ;; -------
+  (define tm-xy (terminal-spec #'xy '(x y) #'symbol? #'eq?))
+  (define tm-ij (terminal-spec #'ij '(i j) #'integer? #'=))
+  (define nt-e (nonterminal-spec #'e
+                                 '(e)
+                                 (list
+                                  (production #'(num . i)
+                                              'num
+                                              (metavar #'i 'i)))))
+  (check-false (nonterminal-production nt-e 'blah))
+  (check-eq? (nonterminal-production nt-e 'blah (λ () 'nope)) 'nope)
+  (check-eq? (production-head-symbol (nonterminal-production nt-e 'num)) 'num))
+
 ;; form ::=
 ;;   (metavar stx symbol)
 ;;   (form-list stx
@@ -157,21 +173,18 @@
                           mvs)))
 
 (module+ test
-
-  ;; ------------
+  ;; -------
   ;; Test {form,nonterminal}-unbound-metavar
-
+  ;; -------
   (define mX (metavar #'x 'x))
   (define mY (metavar #'y 'y))
-  (check-equal? (form-unbound-metavar (form-list #'_ (list mX) #f '())
-                                      (seteq 'x))
-                #f)
+  (check-false (form-unbound-metavar (form-list #'_ (list mX) #f '())
+                                     (seteq 'x)))
   (check-equal? (form-unbound-metavar (form-list #'_ (list mX) #f '())
                                       (seteq))
                 mX)
-  (check-equal? (form-unbound-metavar (form-list #'_ '() (ellipsis mY) '())
-                                      (seteq 'y))
-                #f)
+  (check-false (form-unbound-metavar (form-list #'_ '() (ellipsis mY) '())
+                                     (seteq 'y)))
   (check-equal? (form-unbound-metavar (form-list #'_ '() (ellipsis mY) (list mX))
                                       (seteq 'z))
                 mY)
@@ -221,29 +234,15 @@
             #f))
 
 (module+ test
-
-  (define tm-xy (terminal-spec #'xy '(x y) #'symbol? #'eq?))
-  (define tm-ij (terminal-spec #'ij '(i j) #'integer? #'=))
-  (define nt-e (nonterminal-spec #'e
-                                 '(e)
-                                 (list
-                                  (production #'(num . i)
-                                              'num
-                                              (metavar #'i 'i)))))
+  ;; -----
+  ;; Test make-language, language-lookup-metavar
+  ;; -----
   (define L (make-language #'foo 'L (list tm-xy tm-ij) (list nt-e)))
-
-  (define (L-ref mv-symbol)
-    (language-lookup-metavar L mv-symbol))
-
-  (check-eq? (L-ref 'x) tm-xy)
-  (check-eq? (L-ref 'y) tm-xy)
-  (check-eq? (L-ref 'i) tm-ij)
-  (check-eq? (L-ref 'j) tm-ij)
-  (check-eq? (L-ref 'e) nt-e)
-
-  (check-false (nonterminal-production nt-e 'blah))
-  (check-eq? (nonterminal-production nt-e 'blah (λ () 'nope)) 'nope)
-  (check-eq? (production-head-symbol (nonterminal-production nt-e 'num)) 'num))
+  (check-eq? (language-lookup-metavar L 'x) tm-xy)
+  (check-eq? (language-lookup-metavar L 'y) tm-xy)
+  (check-eq? (language-lookup-metavar L 'i) tm-ij)
+  (check-eq? (language-lookup-metavar L 'j) tm-ij)
+  (check-eq? (language-lookup-metavar L 'e) nt-e))
 
 ;; language-delta ::=
 ;;   (language-delta stx
