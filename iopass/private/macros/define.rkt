@@ -57,20 +57,21 @@
      #:cut
      #:with :terminals-definition-binding #'terminals-id
      #:with [[every-prod-repr-id ...] ...] #'[nt.prod-repr-ids ... ...]
+     #:with [nt-temp ...] (generate-temporaries (@ nt))
      #`(begin
          (define-syntax language-name
-           (let ()
-             (define stx (quote-syntax #,this-syntax))
-             ; terminals
-             (define tms (get-terminals (quote-syntax terminals-id)))
-             ; nonterminals
-             (define nts (list nt.generate ...))
-             (define nt=>pred-id
-               (make-hasheq (map cons nts (list #'nt.pred-repr-id ...))))
-             (define nt=>repr-ids
-               (make-hasheq (map cons nts (list (list #'nt.prod-repr-ids ...) ...))))
-             ; all metavars
-             (define mvs (check-spec-set-metavars (append tms nts)))
+           (let* ([stx (quote-syntax #,this-syntax)]
+                  ; terminals
+                  [tms (get-terminals (quote-syntax terminals-id))]
+                  ; nonterminals
+                  [nt-temp nt.generate] ...
+                  [nts (list nt-temp ...)]
+                  [nt=>pred-id (make-hasheq (list (cons nt-temp #'nt.pred-repr-id)
+                                                  ...))]
+                  [nt=>repr-ids (make-hasheq (list (cons nt-temp (list #'nt.prod-repr-ids ...))
+                                                   ...))]
+                  ; all metavars
+                  [mvs (check-spec-set-metavars (list* nt-temp ... tms))])
              ; ----
              (check-nonterminals nts mvs)
              (language-definition
