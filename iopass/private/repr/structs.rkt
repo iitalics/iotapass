@@ -73,59 +73,52 @@
    (only-in racket/syntax format-symbol)
    syntax/parse)
 
-  ;; language language-repr-ids
-  ;; -> [stxlistof let*-values-binding-syntax]
-  (define (production-bindings lang lang-repr-ids)
+  ;; language [listof [listof #'[<ctor-id> <pred-id> <proj-id>]]
+  ;; -> [listof stx]
+  (define (production-structure-defs lang pr-id-tripless)
     (define lang-name (language-name lang))
-    (define nts (language-nonterminals lang))
-    (define pr=>ids (language-repr-ids-productions lang-repr-ids))
 
-    (define/syntax-parse [(ctor-id pred-id proj-id) ...]
-      (for*/list ([nt (in-list nts)]
-                  [pr (in-list (nonterminal-spec-productions nt))])
-        (hash-ref pr=>ids pr)))
+    (for/list ([nt (in-list (language-nonterminals lang))]
+               [pr-id-triples (in-list pr-id-tripless)])
+      (define/syntax-parse [(ctor-id pred-id proj-id) ...] pr-id-triples)
+      (define/syntax-parse [(name-sym field-count) ...]
+        (for/list ([pr (in-list (nonterminal-spec-productions nt))])
+          (match-define (production _ head-sym fm) pr)
+          (define nt-name (spec-description nt))
+          (list (format-symbol "~a.~a.~a" lang-name nt-name head-sym)
+                (form-field-count fm))))
 
-    (define/syntax-parse [(name-sym field-count) ...]
-      (for*/list ([nt (in-list nts)]
-                  [pr (in-list (nonterminal-spec-productions nt))])
-        (match-define (production _ head-sym fm) pr)
-        (define nt-name (spec-description nt))
-        (list (format-symbol "~a.~a.~a" lang-name nt-name head-sym)
-              (form-field-count fm))))
+      #'(define-values [ctor-id ... pred-id ... proj-id ...]
+          (let*-values ([(_1 ctor-id pred-id proj-id _2)
+                         (make-struct-type 'name-sym     ; name
+                                           #f            ; super
+                                           'field-count  ; # fields
+                                           0 #f '()      ; # auto, auto-v, props
+                                           #f            ; inspector (#f = transparent)
+                                           #f '() #f     ; proc-spec, immutables, guard
+                                           'name-sym)]   ; ctor name
+                        ...)
+            (values ctor-id ...
+                    pred-id ...
+                    proj-id ...)))))
 
-    #`([(_1 ctor-id pred-id proj-id _2)
-        (make-struct-type 'name-sym     ; name
-                          #f            ; super
-                          'field-count  ; # fields
-                          0 #f '()      ; # auto, auto-v, props
-                          #f            ; inspector (#f = transparent)
-                          #f '() #f     ; proc-spec, immutables, guard
-                          'name-sym)]   ; ctor name
+  ;; language [listof id] [listof [listof id]] -> [listof stx]
+  (define (nonterminal-predicate-defs nt-predicate-ids
+                                      pr-predicate-idss)
+    (for/list ([nt-pred-id (in-list nt-predicate-ids)]
+               [pr-pred-ids (in-list pr-predicate-idss)])
+      (define/syntax-parse nt? nt-pred-id)
+      (define/syntax-parse [pr? ...] pr-pred-ids)
+      #'(define (nt? x)
+          (or (pr? x)
+              ...)))))
 
-       ...))
-
-  ;; language language-repr-ids
-  ;; -> [stxlistof let-binding-syntax]
-  (define (nonterminal-bindings lang lang-repr-ids)
-    (define nt=>id (language-repr-ids-predicates lang-repr-ids))
-    (define pr=>ids (language-repr-ids-productions lang-repr-ids))
-
-    (define/syntax-parse [(nt-pred-id [pr-pred-id ...]) ...]
-      (for/list ([nt (in-list (language-nonterminals lang))])
-        (list (hash-ref nt=>id nt)
-              (for/list ([pr (in-list (nonterminal-spec-productions nt))])
-                (cadr (hash-ref pr=>ids pr))))))
-
-    #'([nt-pred-id (λ (x)
-                     (or (pr-pred-id x)
-                         ...))]
-       ...)))
 
 ;; the generate-structs macro is in a submodule so that it can access above functions at
 ;; phase 1
 (module* generate-structs-macro racket/base
   (provide
-   generate-structs)
+   with-generate-structs)
 
   (require
    (for-syntax
@@ -135,31 +128,20 @@
     "../syntax/bindings.rkt"
     "ids.rkt"))
 
-  ;; generates a big (values ...) containing struct functions for each id for each
-  ;; nonterminal, then each production, in order.
-  ;; e.g. if (get-language-repr-ids #'L0) =
-  ;;         (language-repr-ids #{ <e> -> e?
-  ;;                               <d> -> d? }
-  ;;                            #{ <p> -> (p.c p.p p.a)
-  ;;                               <q> -> (q.c q.p q.a) })
-  ;; then
-  ;;   (generate-struct-repr-values L0)
-  ;;     ==>
-  ;;   (values e? d? p.c p.p p.a q.c q.p q.a)
-  ;; in a context where all those id's are bound to the result of (make-struct-type ...)
-  ;; calls.
-
-  (define-syntax generate-structs
+  (define-syntax with-generate-structs
     (syntax-parser
-      [(_ b:language-definition-binding)
-       #:with pr-bindings (production-bindings (@ b.language)
-                                               (@ b.repr-ids))
-       #:with nt-bindings (nonterminal-bindings (@ b.language)
-                                                (@ b.repr-ids))
-       #:with all-ids (language-repr-ids-all-ids (@ b.repr-ids))
-       #'(let*-values pr-bindings
-           (let nt-bindings
-               (values . all-ids)))])))
+      [(_ [#:lang :language-definition-binding
+           #:nt-ids [nt?:id ...]
+           #:pr-ids [({~and pr-triple [pr-c:id pr-p:id pr-j:id]}
+                      ...)
+                     ...]]
+          body ...)
+       #`(let-values ()
+           #,@(production-structure-defs (@ language)
+                                         (@ pr-triple))
+           #,@(nonterminal-predicate-defs (@ nt?)
+                                          (@ pr-c))
+           body ...)])))
 
 ;; =======================================================================================
 
@@ -212,21 +194,27 @@
          [pr-C (production #'(C) 'C (form-list #'() '() #f '()))]
          [nt-xy (nonterminal-spec #'xy '(x y) (list pr-A pr-B))]
          [nt-z (nonterminal-spec #'z '(z) (list pr-C))]
-         [L (make-language #'L 'L '() (list nt-xy nt-z))]
-         [L-ids (make-language-repr-ids (list nt-xy nt-z)
-                                        (hasheq nt-xy #'xy?
-                                                nt-z  #'z?)
-                                        (hasheq nt-xy (list #'[A.c A? A.ref]
-                                                            #'[B.c B? B.ref])
-                                                nt-z  (list #'[C.c C? C.ref])))])
+         [L (make-language #'L 'L '() (list nt-xy nt-z))])
 
     (check-match
-     (syntax->datum (production-bindings L L-ids))
-     `([(_1 A.c A? A.ref _2) (make-struct-type 'L.x/y.A #f '1 ,_ ...)]
-       [(_1 B.c B? B.ref _2) (make-struct-type 'L.x/y.B #f '2 ,_ ...)]
-       [(_1 C.c C? C.ref _2) (make-struct-type 'L.z.C   #f '0 ,_ ...)]))
+     (map syntax->datum
+          (production-structure-defs
+           L
+           (list (list #'[A.c A? A.ref]
+                       #'[B.c B? B.ref])
+                 (list #'[C.c C? C.ref]))))
+     `{(define-values [A.c B.c A? B? A.ref B.ref]
+         (let*-values ([(_1 A.c A? A.ref _2) (make-struct-type 'L.x/y.A #f '1 ,_ ...)]
+                       [(_1 B.c B? B.ref _2) (make-struct-type 'L.x/y.B #f '2 ,_ ...)])
+           (values A.c B.c A? B? A.ref B.ref)))
+       (define-values [C.c C? C.ref]
+         (let*-values ([(_1 C.c C? C.ref _2) (make-struct-type 'L.z.C #f '0 ,_ ...)])
+           (values C.c C? C.ref)))})
 
     (check-match
-     (syntax->datum (nonterminal-bindings L L-ids))
-     `([xy? (λ (x) (or (A? x) (B? x)))]
-       [z?  (λ (x) (or (C? x)))]))))
+     (map syntax->datum
+          (nonterminal-predicate-defs (list #'xy? #'z?)
+                                      (list (list #'A? #'B?)
+                                            (list #'C?))))
+     `((define (xy? x) (or (A? x) (B? x)))
+       (define (z?  x) (or (C? x)))))))

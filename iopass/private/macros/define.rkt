@@ -78,7 +78,11 @@
               (repr:make-language-repr-ids nts nt=>pred-id nt=>repr-ids))))
 
          (define-values [nt.pred-repr-id ... every-prod-repr-id ... ...]
-           (generate-structs language-name)))]))
+           (with-generate-structs [#:lang language-name
+                                   #:nt-ids [nt.pred-repr-id ...]
+                                   #:pr-ids [(nt.prod-repr-ids ...) ...]]
+             (values nt.pred-repr-id ...
+                     every-prod-repr-id ... ...))))]))
 
 (begin-for-syntax
   ;; [listof nonterminal-spec] [setof metavar] -> void
