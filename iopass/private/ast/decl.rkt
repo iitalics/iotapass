@@ -106,6 +106,16 @@
    head-symbol
    form])
 
+;; nonterminal symbol        -> (or #f production)
+;; nonterminal symbol [-> X] -> (or X  production)
+(define (nonterminal-production nt head-sym
+                                [fail-proc (λ () #f)])
+  (or (findf (λ (pr)
+               (eq? (production-head-symbol pr)
+                    head-sym))
+             (nonterminal-spec-productions nt))
+      (fail-proc)))
+
 ;; form ::=
 ;;   (metavar stx symbol)
 ;;   (form-list stx
@@ -229,8 +239,11 @@
   (check-eq? (L-ref 'y) tm-xy)
   (check-eq? (L-ref 'i) tm-ij)
   (check-eq? (L-ref 'j) tm-ij)
-  (check-eq? (L-ref 'e) nt-e))
+  (check-eq? (L-ref 'e) nt-e)
 
+  (check-false (nonterminal-production nt-e 'blah))
+  (check-eq? (nonterminal-production nt-e 'blah (λ () 'nope)) 'nope)
+  (check-eq? (production-head-symbol (nonterminal-production nt-e 'num)) 'num))
 
 ;; language-delta ::=
 ;;   (language-delta stx
