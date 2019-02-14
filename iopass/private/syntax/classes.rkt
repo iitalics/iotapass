@@ -13,7 +13,6 @@
  ; for templates
  terminal-template
  nonterminal-template
- #;
  form-template)
 
 (require
@@ -202,6 +201,11 @@
 ;; patterns for 'template' macros
 ;; -------------------------------------------
 
+(define-syntax-rule (value-attr (sc sc-args ...))
+  (syntax-parse this-syntax
+    [{~var || (sc sc-args ...)}
+     (@ value)]))
+
 ;; <terminal-template> ::=
 ;;   (unquote <expr>)
 ;;   <datum>
@@ -232,41 +236,43 @@
   [pattern ({~datum unquote} e)
            #:attr value (ast:t:unquoted #'e)]
 
-  #;
-  [pattern (head:id . body-tm)
-           #:attr value ('???)])
+  [pattern (head . tmpl)
+           #:declare head (known-production-id nt)
+           #:declare tmpl (form-template (ast:production-form (@ head.production)))
+           #:attr value (ast:t:prod (@ head.production)
+                                    (@ tmpl.value))])
 
 ;; <form-list-template> ::=
 ;;   (<form-template> ...)
 ;;   (<form-template> ... <form-template> ooo <form-template> ...)
 ;;
 ;; lang : ast:language
-;; nt : ast:nonterminal-spec
+;; before : [listof ast:form]
+;; repeat : (or #f ast:ellipsis)
+;; after : [listof ast:form]
 ;; (@ value) : [listof ast:t:template]
-(define-syntax-class (form-list-template lang fl)
+(define-syntax-class (form-list-template before repeat after)
   #:description "parenthesized list template"
   #:attributes (value)
   [pattern ()
            #:attr value '()])
 
-#;
 ;; <form-template> ::=
 ;;   <terminal-template>     if 'fm' is a terminal metavar
 ;;   <nonterminal-template>  if 'fm' is a nonterminal metavar
 ;;   <form-list-template>    if 'fm' is a form-list
 ;;
-;; lang : ast:language
 ;; fm : ast:form
 ;; (@ value) : [listof ast:t:template]
-(define-syntax-class (form-template lang fm)
+(define-syntax-class (form-template fm)
   #:description "template"
   #:attributes (value)
   [pattern _
            #:attr value
            (match fm
-             [(ast:metavar _ mv)
-              ('???)]
              [(ast:form-list _ before repeat after)
-              ('???)])
-           #:fail-when (form-template-error? (@ value))
-           (form-template-error-msg (@ value))])
+              (value-attr (form-list-template before repeat after))]
+             [(ast:metavar _ mv)
+              (raise-syntax-error #f
+                "metavariables unimplemented"
+                this-syntax)])])

@@ -57,25 +57,28 @@
 (define-syntax template
   (syntax-parser
     [(_ :lang+mv tmpl)
-     (compile-template
-      (match (@ spec)
-        [(? terminal-spec? tm)
-         (syntax-parse #'tmpl
-           [{~var || (c:terminal-template tm)}
-            (@ value)])]
-        [(? nonterminal-spec? nt)
-         (syntax-parse #'tmpl
-           [{~var || (c:nonterminal-template nt)}
-            (@ value)])]))]))
+     (compile-template (@ repr-ids)
+                       (match (@ spec)
+                         [(? terminal-spec? tm)
+                          (syntax-parse #'tmpl
+                            [{~var || (c:terminal-template tm)}
+                             (@ value)])]
+                         [(? nonterminal-spec? nt)
+                          (syntax-parse #'tmpl
+                            [{~var || (c:nonterminal-template nt)}
+                             (@ value)])]))]))
 
 (begin-for-syntax
-  ;; template -> syntax
-  (define (compile-template tmp)
-    (match tmp
-      [(t:unquoted stx)
-       stx]
-      [(t:datum stx)
-       #`'#,stx])))
+  ;; language-repr-ids template -> syntax
+  (define (compile-template repr-ids tmp)
+    (define pr=>ids (language-repr-ids-productions repr-ids))
+    (let cmp-tmp ([tmp tmp])
+      (match tmp
+        [(t:unquoted stx) stx]
+        [(t:datum stx) #`'#,stx]
+        [(t:prod pr tmps)
+         (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
+         #`(ctor #,@(map cmp-tmp tmps))]))))
 
 ;; =======================================================================================
 
@@ -92,13 +95,17 @@
 
   (define-language L
     #:terminals T
-    [e ::= (num . i) (op s e ...)]
+    [e ::=
+       (pi)
+       (num . i)
+       (op s e ...)]
     [d ::= (def x e)])
 
   ;; ---------------
   ;; 'raw-prod' tests
   ;; ---------------
 
+  (define e-pi (raw-prod (L e) (pi)))
   (define e-5 (raw-prod (L e) (num 5)))
   (define e-7 (raw-prod (L e) (num 7)))
   (define e-+ (raw-prod (L e) (op "+" (list e-5 e-7))))
@@ -133,4 +140,6 @@
                     (template (L i) (1 2)))))
   (check-exn #px"list datum not allowed"
              (λ () (convert-compile-time-error
-                    (template (L i) ())))))
+                    (template (L i) ()))))
+  ; productions
+  (check-equal? (template (L e) (pi)) e-pi))
