@@ -1,8 +1,6 @@
 #lang racket/base
 (provide
- (struct-out field-repr)
- form-field-count
- form-field-repr)
+ form-field-count)
 
 (require
  "../ast/decl.rkt"
@@ -10,14 +8,8 @@
  threading)
 
 ;; --------------------
-;; representation of forms as struct fields
+;; number of fields in the struct representation of a production
 ;; --------------------
-
-;; field-repr ::= (field-repr symbol nat)
-(struct field-repr
-  [metavar-symbol
-   ellipsis-depth]
-  #:transparent)
 
 ;; form -> exact-integer
 ;; Returns the number of fields in the representation of the given form.
@@ -32,30 +24,6 @@
      (+ (count* before)
         (count* (ellipsis->list repeat))
         (count* after))]))
-
-;; form -> [listof field-repr]
-;; Returns list of fields to represent the given form.
-(define (form-field-repr fm)
-  (reverse
-   (let repr/depth ([fm fm]
-                    [lst '()]
-                    [ed 0])
-
-     (define (repr fm lst)
-       (repr/depth fm lst ed))
-     (define (repr+1 fm lst)
-       (repr/depth fm lst (add1 ed)))
-
-     (match fm
-       [(metavar _ x)
-        (cons (field-repr x ed)
-              lst)]
-
-       [(form-list _ before repeat after)
-        (~> lst
-            (foldl repr   _ before)
-            (foldl repr+1 _ (ellipsis->list repeat))
-            (foldl repr   _ after))]))))
 
 ;; --------------------
 ;; generate-structs macro
@@ -113,7 +81,6 @@
           (or (pr? x)
               ...)))))
 
-
 ;; the generate-structs macro is in a submodule so that it can access above functions at
 ;; phase 1
 (module* generate-structs-macro racket/base
@@ -151,32 +118,27 @@
    "../syntax/util.rkt")
 
   ;; (x y z ... [w])
-  (let ([fm (form-list 0
-                       (list (metavar 1 'x)
-                             (metavar 2 'y))
-                       (ellipsis (metavar 3 'z))
-                       (list (form-list 4
-                                        (list (metavar 5 'w))
-                                        #f
-                                        '())))])
-    (check-equal? (form-field-count fm) 4)
-    (check-equal? (form-field-repr fm)
-                  (list (field-repr 'x 0)
-                        (field-repr 'y 0)
-                        (field-repr 'z 1)
-                        (field-repr 'w 0))))
+  (check-equal? (form-field-count
+                 (form-list 0
+                            (list (metavar 1 'x)
+                                  (metavar 2 'y))
+                            (ellipsis (metavar 3 'z))
+                            (list (form-list 4
+                                             (list (metavar 5 'w))
+                                             #f
+                                             '()))))
+                4)
 
   ;; ([x ...] ...)
-  (let ([fm (form-list 0
-                       '()
-                       (ellipsis (form-list 1
-                                            '()
-                                            (ellipsis (metavar 2 'x))
-                                            '()))
-                       '())])
-    (check-equal? (form-field-count fm) 1)
-    (check-equal? (form-field-repr fm)
-                  (list (field-repr 'x 2))))
+  (check-equal? (form-field-count
+                 (form-list 0
+                            '()
+                            (ellipsis (form-list 1
+                                                 '()
+                                                 (ellipsis (metavar 2 'x))
+                                                 '()))
+                            '()))
+                1)
 
   ;; (define-language L
   ;;   [x y ::= (A x) (B x y)]
