@@ -1,6 +1,6 @@
 #lang racket/base
 (provide
- parse-mt/form
+ parse-mt
  parse-mt/terminal
  parse-mt/nonterminal)
 
@@ -9,25 +9,32 @@
  (prefix-in c: "classes.rkt")
  "../ast/decl.rkt"
  (rename-in syntax/parse [attribute @])
- racket/match)
+ racket/match
+ racket/list)
 
 ;; =======================================================================================
+
+;; spec language syntax -> mt:metaterm
+(define (parse-mt s lang stx)
+  (match s
+    [(? nonterminal-spec? nt)
+     (parse-mt/nonterminal nt lang stx)]
+    [(? terminal-spec? tm)
+     (parse-mt/terminal tm stx)]))
 
 ;; form language syntax -> [listof mt:metaterm]
 (define (parse-mt/form fm lang stx)
   (match fm
     [(form-list _ before repeat after)
-     (parse-mt/list before repeat after stx)]
+     (parse-mt/list before repeat after lang stx)]
     [(metavar mv-orig-stx x)
-     (match (language-lookup-metavar lang x)
-       [(? nonterminal-spec? nt)
-        (list (parse-mt/nonterminal nt lang stx))]
-       [(? terminal-spec? tm)
-        (list (parse-mt/terminal tm stx))]
-       [_
-        (raise-syntax-error #f
-          "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
-          mv-orig-stx)])]))
+     (define s
+       (or (language-lookup-metavar lang x)
+           (raise-syntax-error #f
+             "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
+             mv-orig-stx)))
+     (list
+      (parse-mt s lang stx))]))
 
 ;; nonterminal-spec language syntax -> mt:metaterm
 (define (parse-mt/nonterminal nt lang stx)
@@ -53,8 +60,27 @@
      "list datum not allowed"
      (mt:datum #'d)]))
 
-;; [listof form] (or #f ellipsis) [listof form] syntax
+;; [listof form] (or #f ellipsis) [listof form] language syntax
 ;;   -> [listof mt:metaterm]
-(define (parse-mt/list before repeat after stx)
+(define (parse-mt/list before repeat after lang stx)
   (syntax-parse stx
-    [() '()]))
+    [(e ...)
+     ; implement this later..
+     #:fail-when repeat
+     "unimplemented: metaterms for forms with ellipsis"
+
+     ; check arity
+     #:do [(define n-args (length (@ e)))
+           (define n-before (length before))
+           (define n-expected (+ n-before
+                                 (length after)))]
+     ; this will be '<' if 'repeat' is not #f
+     #:fail-unless (= n-args n-expected)
+     (format "expected ~a arguments, got ~a"
+             n-expected
+             n-args)
+
+     (append-map (λ (fm stx)
+                   (parse-mt/form fm lang stx))
+                 (append before after)
+                 (@ e))]))

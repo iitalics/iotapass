@@ -55,15 +55,14 @@
 ;; -----------
 ;; template
 ;; -----------
+
 (define-syntax template
   (syntax-parser
     [(_ :lang+mv tmpl)
      (compile-template (@ repr-ids)
-                       (match (@ spec)
-                         [(? terminal-spec? tm)
-                          (parse-mt/terminal tm #'tmpl)]
-                         [(? nonterminal-spec? nt)
-                          (parse-mt/nonterminal nt (@ language) #'tmpl)]))]))
+                       (parse-mt (@ spec)
+                                 (@ language)
+                                 #'tmpl))]))
 
 (begin-for-syntax
   ;; language-repr-ids template -> syntax
@@ -94,6 +93,7 @@
     [e ::=
        (pi)
        (num . i)
+       (if e e e)
        (op s e ...)]
     [d ::= (def x e)])
 
@@ -125,9 +125,13 @@
   ;; 'template' tests
   ;; ---------------
 
+  (define e-0 (raw-prod (L e) (num 0)))
+  (define e-< (raw-prod (L e) (op "<" (list e-5 e-7))))
+
   ; unquoted
   (check-eqv? (template (L i) ,(+ 5 6)) 11)
   (check-eq? (template (L e) ,e-5) e-5)
+
   ; datum
   (check-eqv? (template (L i) 5)  5)
   (check-eq? (template (L x) foo) 'foo)
@@ -137,6 +141,11 @@
   (check-exn #px"list datum not allowed"
              (λ () (convert-compile-time-error
                     (template (L i) ()))))
+
   ; productions
   (check-equal? (template (L e) (pi)) e-pi)
-  (check-equal? (template (L e) (num . 5)) e-5))
+  (check-equal? (template (L e) (num . 5)) e-5)
+  (check-equal? (template (L e)
+                          (if ,e-< (pi) (num . 0)))
+                (raw-prod (L e)
+                          (if e-< e-pi e-0))))
