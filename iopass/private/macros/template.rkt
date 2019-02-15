@@ -30,10 +30,15 @@
              #:attr nonterminal (@ mv.spec)])
 
   (define-splicing-syntax-class raw-function
-    #:attributes (fun)
-    [pattern {~seq} #:attr fun 'ctor]
-    [pattern {~seq #:pred} #:attr fun 'pred]
-    [pattern {~seq #:proj i} #:attr fun (list #'i)]))
+    #:attributes (fun head [arg 1])
+    [pattern {~seq (head:id arg ...)}
+             #:attr fun 'ctor]
+    [pattern {~seq #:pred head:id obj}
+             #:with [arg ...] #'[obj]
+             #:attr fun 'pred]
+    [pattern {~seq #:proj (head i) obj}
+             #:with [arg ...] #'[obj i]
+             #:attr fun 'proj]))
 
 ;; -----------
 ;; raw-prod
@@ -42,15 +47,14 @@
 (define-syntax raw-prod
   (syntax-parser
     [(_ :lang+nt
-        f:raw-function
-        (head arg ...))
-     #:declare head (c:known-production-id (@ nonterminal))
+        f:raw-function)
+     #:with {~var || (c:known-production-id (@ nonterminal))} (@ f.head)
      #:with [ct pr pj] (hash-ref (language-repr-ids-productions (@ repr-ids))
-                                 (@ head.production))
+                                 (@ production))
      (match (@ f.fun)
-       ['ctor #'(ct arg ...)]
-       ['pred #'(pr arg ...)]
-       [(list i) #`(pj arg ... #,i)])]))
+       ['ctor #'(ct f.arg ...)]
+       ['pred #'(pr f.arg ...)]
+       ['proj #'(pj f.arg ...)])]))
 
 ;; -----------
 ;; template
@@ -65,15 +69,15 @@
                                  #'tmpl))]))
 
 (begin-for-syntax
-  ;; language-repr-ids template -> syntax
-  (define (compile-template repr-ids tmp)
+  ;; language-repr-ids metaterm -> syntax
+  (define (compile-template repr-ids mt)
     (define pr=>ids (language-repr-ids-productions repr-ids))
-    (let cmp-tmp ([tmp tmp])
-      (match tmp
+    (let compile1 ([mt mt])
+      (match mt
         [(mt:unquoted stx) stx]
-        [(mt:prod pr tmps)
+        [(mt:prod pr args)
          (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
-         #`(ctor #,@(map cmp-tmp tmps))]))))
+         #`(ctor #,@(map compile1 args))]))))
 
 ;; =======================================================================================
 
@@ -107,26 +111,23 @@
   (define e-+ (raw-prod (L e) (op "+" (list e-5 e-7))))
   (define d-twelve (raw-prod (L d) (def 'twelve e-+)))
 
-  (check-true (raw-prod (L e) #:pred (num e-5)))
-  (check-true (raw-prod (L e) #:pred (num e-7)))
-  (check-true (raw-prod (L e) #:pred (op e-+)))
-  (check-true (raw-prod (L d) #:pred (def d-twelve)))
-  (check-false (raw-prod (L e) #:pred (num e-+)))
-  (check-false (raw-prod (L e) #:pred (num 5)))
-  (check-false (raw-prod (L e) #:pred (op "5")))
+  (check-true (raw-prod (L e) #:pred num e-5))
+  (check-true (raw-prod (L e) #:pred num e-7))
+  (check-true (raw-prod (L e) #:pred op e-+))
+  (check-true (raw-prod (L d) #:pred def d-twelve))
+  (check-false (raw-prod (L e) #:pred num e-+))
+  (check-false (raw-prod (L e) #:pred num 5))
+  (check-false (raw-prod (L e) #:pred op "5"))
 
-  (check-equal? (raw-prod (L e) #:proj 0 (num e-5)) 5)
-  (check-equal? (raw-prod (L e) #:proj 0 (num e-7)) 7)
-  (check-equal? (raw-prod (L e) #:proj 0 (op e-+)) "+")
-  (check-equal? (raw-prod (L e) #:proj 1 (op e-+)) (list e-5 e-7))
-  (check-eq? (raw-prod (L d) #:proj 1 (def d-twelve)) e-+)
+  (check-equal? (raw-prod (L e) #:proj [num 0] e-5) 5)
+  (check-equal? (raw-prod (L e) #:proj [num 0] e-7) 7)
+  (check-equal? (raw-prod (L e) #:proj [op 0] e-+) "+")
+  (check-equal? (raw-prod (L e) #:proj [op 1] e-+) (list e-5 e-7))
+  (check-eq? (raw-prod (L d) #:proj [def 1] d-twelve) e-+)
 
   ;; ---------------
   ;; 'template' tests
   ;; ---------------
-
-  (define e-0 (raw-prod (L e) (num 0)))
-  (define e-< (raw-prod (L e) (op "<" (list e-5 e-7))))
 
   ; unquoted
   (check-eqv? (template (L i) ,(+ 5 6)) 11)
@@ -143,9 +144,6 @@
                     (template (L i) ()))))
 
   ; productions
-  (check-equal? (template (L e) (pi)) e-pi)
   (check-equal? (template (L e) (num . 5)) e-5)
-  (check-equal? (template (L e)
-                          (if ,e-< (pi) (num . 0)))
-                (raw-prod (L e)
-                          (if e-< e-pi e-0))))
+  (check-equal? (template (L e) (pi)) e-pi)
+  (check-equal? (template (L d) (def twelve ,e-+)) d-twelve))
