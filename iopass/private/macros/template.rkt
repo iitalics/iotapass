@@ -98,7 +98,8 @@
        (pi)
        (num . i)
        (if e e e)
-       (op s e ...)]
+       (op s e ...)
+       (print e)]
     [d ::= (def x e)])
 
   ;; ---------------
@@ -146,4 +147,10 @@
   ; productions
   (check-equal? (template (L e) (num . 5)) e-5)
   (check-equal? (template (L e) (pi)) e-pi)
-  (check-equal? (template (L d) (def twelve ,e-+)) d-twelve))
+  (check-equal? (template (L d) (def twelve ,e-+)) d-twelve)
+  (check-exn #px"expected 2 arguments, got 1"
+             (λ () (convert-compile-time-error
+                    (template (L d) (def twelve)))))
+  (check-exn #px"expected 1 argument, got 2"
+             (λ () (convert-compile-time-error
+                    (template (L e) (print (num . 1) (num . 2)))))))

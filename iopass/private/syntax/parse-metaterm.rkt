@@ -71,16 +71,19 @@
 
      ; check arity
      #:do [(define n-args (length (@ e)))
-           (define n-before (length before))
-           (define n-expected (+ n-before
-                                 (length after)))]
-     ; this will be '<' if 'repeat' is not #f
-     #:fail-unless (= n-args n-expected)
-     (format "expected ~a arguments, got ~a"
-             n-expected
-             n-args)
+           (define n-min (+ (length before)
+                            (length after)))]
+     #:fail-unless (or repeat (= n-args n-min))
+     (format "expected ~a argument~a, got ~a"
+             n-min (plural n-min) n-args)
+     #:fail-when (and repeat (< n-args n-min))
+     (format "expected at least ~a argument~a, got ~a"
+             n-min (plural n-min) n-args)
 
      (append-map (λ (fm stx)
                    (parse-mt/form fm lang stx))
                  (append before after)
                  (@ e))]))
+
+(define (plural n)
+  (if (= n 1) "" "s"))
