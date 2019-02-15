@@ -153,4 +153,7 @@
                     (template (L d) (def twelve)))))
   (check-exn #px"expected 1 argument, got 2"
              (λ () (convert-compile-time-error
-                    (template (L e) (print (num . 1) (num . 2)))))))
+                    (template (L e) (print (num . 1) (num . 2))))))
+  (check-exn #px"expected at least 1 argument, got 0"
+             (λ () (convert-compile-time-error
+                    (template (L e) (op))))))

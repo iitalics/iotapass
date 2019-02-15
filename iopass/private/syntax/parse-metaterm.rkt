@@ -65,10 +65,6 @@
 (define (parse-mt/list before repeat after lang stx)
   (syntax-parse stx
     [(e ...)
-     ; implement this later..
-     #:fail-when repeat
-     "unimplemented: metaterms for forms with ellipsis"
-
      ; check arity
      #:do [(define n-args (length (@ e)))
            (define n-min (+ (length before)
@@ -80,10 +76,16 @@
      (format "expected at least ~a argument~a, got ~a"
              n-min (plural n-min) n-args)
 
-     (append-map (λ (fm stx)
-                   (parse-mt/form fm lang stx))
-                 (append before after)
-                 (@ e))]))
+     (match repeat
+       [(ellipsis rep-fm)
+        (raise-syntax-error #f
+          "UNIMPLEMENTED: metaterms for forms with ellipsis"
+          stx)]
+
+       [#f
+        (append-map (λ (fm stx) (parse-mt/form fm lang stx))
+                    (append before after)
+                    (@ e))])]))
 
 (define (plural n)
   (if (= n 1) "" "s"))
