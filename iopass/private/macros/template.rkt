@@ -63,7 +63,7 @@
                          [(? terminal-spec? tm)
                           (parse-mt/terminal tm #'tmpl)]
                          [(? nonterminal-spec? nt)
-                          (parse-mt/nonterminal nt #'tmpl)]))]))
+                          (parse-mt/nonterminal nt (@ language) #'tmpl)]))]))
 
 (begin-for-syntax
   ;; language-repr-ids template -> syntax
@@ -138,4 +138,5 @@
              (λ () (convert-compile-time-error
                     (template (L i) ()))))
   ; productions
-  (check-equal? (template (L e) (pi)) e-pi))
+  (check-equal? (template (L e) (pi)) e-pi)
+  (check-equal? (template (L e) (num . 5)) e-5))
