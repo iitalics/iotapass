@@ -227,11 +227,12 @@
                  (extend-mapping _ tms)
                  (extend-mapping _ nts))))
 
-;; language symbol -> (or #f spec)
-(define (language-lookup-metavar lang sym)
+;; language symbol        -> (or #f spec)
+;; language symbol [-> X] -> (or X  spec)
+(define (language-lookup-metavar lang sym [fail-proc (λ () #f)])
   (hash-ref (language-metavar-spec-mapping lang)
             sym
-            #f))
+            fail-proc))
 
 (module+ test
   ;; -----
@@ -242,7 +243,9 @@
   (check-eq? (language-lookup-metavar L 'y) tm-xy)
   (check-eq? (language-lookup-metavar L 'i) tm-ij)
   (check-eq? (language-lookup-metavar L 'j) tm-ij)
-  (check-eq? (language-lookup-metavar L 'e) nt-e))
+  (check-eq? (language-lookup-metavar L 'e) nt-e)
+  (check-eq? (language-lookup-metavar L 'f) #f)
+  (check-eq? (language-lookup-metavar L 'f (λ () 'failed)) 'failed))
 
 ;; language-delta ::=
 ;;   (language-delta stx

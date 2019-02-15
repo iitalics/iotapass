@@ -28,13 +28,13 @@
     [(form-list _ before repeat after)
      (parse-mt/list before repeat after lang stx)]
     [(metavar mv-orig-stx x)
-     (define s
-       (or (language-lookup-metavar lang x)
-           (raise-syntax-error #f
-             "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
-             mv-orig-stx)))
-     (list
-      (parse-mt s lang stx))]))
+     (define (mv-fail)
+       (raise-syntax-error #f
+         "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
+         mv-orig-stx))
+     (list (parse-mt (language-lookup-metavar lang x mv-fail)
+                     lang
+                     stx))]))
 
 ;; nonterminal-spec language syntax -> mt:metaterm
 (define (parse-mt/nonterminal nt lang stx)
