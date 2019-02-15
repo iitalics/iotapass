@@ -17,24 +17,21 @@
 ;; spec language syntax -> mt:metaterm
 (define (parse-mt s lang stx)
   (match s
-    [(? nonterminal-spec? nt)
-     (parse-mt/nonterminal nt lang stx)]
     [(? terminal-spec? tm)
-     (parse-mt/terminal tm stx)]))
+     (parse-mt/terminal tm stx)]
+    [(? nonterminal-spec? nt)
+     (parse-mt/nonterminal nt lang stx)]))
 
-;; form language syntax -> [listof mt:metaterm]
-(define (parse-mt/form fm lang stx)
-  (match fm
-    [(form-list _ before repeat after)
-     (parse-mt/list before repeat after lang stx)]
-    [(metavar mv-orig-stx x)
-     (define (mv-fail)
-       (raise-syntax-error #f
-         "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
-         mv-orig-stx))
-     (list (parse-mt (language-lookup-metavar lang x mv-fail)
-                     lang
-                     stx))]))
+;; terminal-spec syntax -> mt:metaterm
+(define (parse-mt/terminal tm stx)
+  (syntax-parse stx
+    [({~datum unquote} e)
+     (mt:unquoted #'e)]
+
+    [d
+     #:fail-when (or (null? (syntax-e #'d)) (pair? (syntax-e #'d)))
+     "list datum not allowed"
+     (mt:datum #'d)]))
 
 ;; nonterminal-spec language syntax -> mt:metaterm
 (define (parse-mt/nonterminal nt lang stx)
@@ -49,16 +46,19 @@
                              lang
                              #'body))]))
 
-;; terminal-spec syntax -> mt:metaterm
-(define (parse-mt/terminal tm stx)
-  (syntax-parse stx
-    [({~datum unquote} e)
-     (mt:unquoted #'e)]
-
-    [d
-     #:fail-when (or (null? (syntax-e #'d)) (pair? (syntax-e #'d)))
-     "list datum not allowed"
-     (mt:datum #'d)]))
+;; form language syntax -> [listof mt:metaterm]
+(define (parse-mt/form fm lang stx)
+  (match fm
+    [(form-list _ before repeat after)
+     (parse-mt/list before repeat after lang stx)]
+    [(metavar mv-orig-stx x)
+     (define (mv-fail)
+       (raise-syntax-error #f
+         "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
+         mv-orig-stx))
+     (list (parse-mt (language-lookup-metavar lang x mv-fail)
+                     lang
+                     stx))]))
 
 ;; [listof form] (or #f ellipsis) [listof form] language syntax
 ;;   -> [listof mt:metaterm]
