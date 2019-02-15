@@ -175,18 +175,21 @@
   (require rackunit)
 
   (let* ([tm-x (ast:terminal-spec #'x '(x) #'symbol? #'eq?)]
-         [nt-e (ast:nonterminal-spec #'e '(e) '())]
+         [pr-p (ast:production #'p 'p (ast:metavar #'x 'x))]
+         [nt-e (ast:nonterminal-spec #'e '(e) (list pr-p))]
          [L (ast:make-language
              #'L
              'L
              (list tm-x)
              (list nt-e))])
 
-    (syntax-parse #'[x e]
+    (syntax-parse #'[x e p]
       [[{~var X (known-metavar-id L)}
-        {~var E (known-metavar-id L)}]
+        {~var E (known-metavar-id L)}
+        {~var P (known-production-id nt-e)}]
        (check-eq? (@ X.spec) tm-x)
-       (check-eq? (@ E.spec) nt-e)])
+       (check-eq? (@ E.spec) nt-e)
+       (check-eq? (@ P.production) pr-p)])
 
     (check-exn #px"metavariable not defined"
                (λ () (syntax-parse #'y
@@ -198,7 +201,11 @@
 
     (check-exn #px"expected terminal metavariable"
                (λ () (syntax-parse #'e
-                       [{~var E (terminal-metavar-id L)} 0])))))
+                       [{~var E (terminal-metavar-id L)} 0])))
+
+    (check-exn #px"q: not a production of nonterminal 'e'"
+               (λ () (syntax-parse #'q
+                       [{~var Q (known-production-id nt-e)} 0])))))
 
 #|
 ;; -------------------------------------------
