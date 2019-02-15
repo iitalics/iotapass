@@ -9,15 +9,18 @@
  known-metavar-id
  nonterminal-metavar-id
  terminal-metavar-id
- known-production-id
+ known-production-id)
  ; for templates
+#;
  terminal-template
+#;
  nonterminal-template
- form-template)
+#;
+ form-template
 
 (require
  (prefix-in ast: "../ast/decl.rkt")
- (prefix-in ast:t: "../ast/template.rkt")
+ ; (prefix-in ast:t: "../ast/template.rkt")
  (for-template racket/base)
  (rename-in syntax/parse [attribute @])
  racket/match)
@@ -197,6 +200,7 @@
                (λ () (syntax-parse #'e
                        [{~var E (terminal-metavar-id L)} 0])))))
 
+#|
 ;; -------------------------------------------
 ;; patterns for 'template' macros
 ;; -------------------------------------------
@@ -276,3 +280,4 @@
               (raise-syntax-error #f
                 "metavariables unimplemented"
                 this-syntax)])])
+|#

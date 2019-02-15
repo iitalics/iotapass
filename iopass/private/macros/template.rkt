@@ -9,9 +9,10 @@
   (rename-in syntax/parse [attribute @])
   (prefix-in c: "../syntax/classes.rkt")
   "../syntax/bindings.rkt"
+  "../syntax/parse-metaterm.rkt"
   "../repr/ids.rkt"
   "../ast/decl.rkt"
-  (prefix-in t: "../ast/template.rkt")))
+  (prefix-in mt: "../ast/metaterm.rkt")))
 
 (begin-for-syntax
   (define-syntax-class lang+mv
@@ -60,13 +61,9 @@
      (compile-template (@ repr-ids)
                        (match (@ spec)
                          [(? terminal-spec? tm)
-                          (syntax-parse #'tmpl
-                            [{~var || (c:terminal-template tm)}
-                             (@ value)])]
+                          (parse-mt/terminal tm #'tmpl)]
                          [(? nonterminal-spec? nt)
-                          (syntax-parse #'tmpl
-                            [{~var || (c:nonterminal-template nt)}
-                             (@ value)])]))]))
+                          (parse-mt/nonterminal nt #'tmpl)]))]))
 
 (begin-for-syntax
   ;; language-repr-ids template -> syntax
@@ -74,9 +71,8 @@
     (define pr=>ids (language-repr-ids-productions repr-ids))
     (let cmp-tmp ([tmp tmp])
       (match tmp
-        [(t:unquoted stx) stx]
-        [(t:datum stx) #`'#,stx]
-        [(t:prod pr tmps)
+        [(mt:unquoted stx) stx]
+        [(mt:prod pr tmps)
          (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
          #`(ctor #,@(map cmp-tmp tmps))]))))
 
