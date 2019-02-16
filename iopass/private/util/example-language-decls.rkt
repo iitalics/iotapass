@@ -14,13 +14,12 @@
 (define tm-i  (terminal-spec #'[i ::=] '(i) #'exact-integer? #'=))
 
 ;; (define-language L
-;;   [a b ::= (A a) (B x c)]
+;;   [a b ::= (A a) (B x c ...)]
 ;;   [c   ::= (C)])
 
 (define fm-x-c (form-list #'(x y)
-                          (list (metavar #'x 'x)
-                                (metavar #'c 'c))
-                          #f
+                          (list (metavar #'x 'x))
+                          (ellipsis (metavar #'c 'c))
                           '()))
 (define pr-A  (production #'(A a) 'A (metavar #'a 'a)))
 (define pr-B  (production #'(B x c) 'B fm-x-c))

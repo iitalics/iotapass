@@ -116,11 +116,24 @@
          (map/transposed n f (cdr l)))))
 
 (module+ test
-  (require rackunit)
+  (require
+   rackunit
+   "../util/example-language-decls.rkt"
+   "util.rkt")
+
   (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
                 '())
   (check-equal? (map/transposed 2 (λ (i) (list i i)) '())
                 '[() ()])
   (check-equal? (map/transposed 2 (λ (i) (list i (* i i))) (range 4))
                 (list (list 0 1 2 3)
-                      (list 0 1 4 9))))
+                      (list 0 1 4 9)))
+
+  (check-match (parse-mt/form fm-x-c
+                              L
+                              #'[foo (C) ,c2 ,c3])
+               (list
+                (mt:datum (app syntax-e (== 'foo)) (== tm-xy eq?))
+                (list (mt:prod (== pr-C eq?) '())
+                      (mt:unquoted (free-id= c2) (== nt-c eq?))
+                      (mt:unquoted (free-id= c3) (== nt-c eq?))))))
