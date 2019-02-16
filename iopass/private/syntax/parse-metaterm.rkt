@@ -5,13 +5,13 @@
  parse-mt/nonterminal)
 
 (require
- (prefix-in mt: "../ast/metaterm.rkt")
  (prefix-in c: "classes.rkt")
+ (prefix-in mt: "../ast/metaterm.rkt")
+ (only-in "../repr/structs.rkt" form-field-count)
  "../ast/decl.rkt"
  (rename-in syntax/parse [attribute @])
  racket/match
- racket/list
- threading)
+ racket/list)
 
 ;; =======================================================================================
 
@@ -96,7 +96,9 @@
                       [(middle-stxs after-stxs) (split-at next-stxs n-mid)]
                       ; parse syntax recursively; middle needs to be "transposed"
                       [(before-mts) (append-map parse/form before before-stxs)]
-                      [(middle-mts) (map/transposed parse/rep-form middle-stxs)]
+                      [(middle-mts) (map/transposed (form-field-count rep-fm)
+                                                    parse/rep-form
+                                                    middle-stxs)]
                       [(after-mts) (append-map parse/form after after-stxs)])
           (append before-mts
                   middle-mts
@@ -105,20 +107,20 @@
 (define (plural n)
   (if (= n 1) "" "s"))
 
-;; [X -> [List Y ...]] [Listof X] -> [List [Listof Y] ...]
-(define/match (map/transposed f l)
-  [{_ '()}         '()]
-  [{_ (list x)}    (map list (f x))]
-  [{_ (cons x xs)} (map cons (f x) (map/transposed f xs))])
+;; (n : nat) [X -> (list Y ...n)] [listof X] -> (list [listof Y] ...n)
+(define (map/transposed n f l)
+  (if (null? l)
+    (make-list n '())
+    (map cons
+         (f (car l))
+         (map/transposed n f (cdr l)))))
 
 (module+ test
-  (require
-   rackunit
-   "util.rkt")
-
-  (define-syntax-rule (check-null? x) (check-equal? x '()))
-  (check-null? (map/transposed (λ (i) '()) (range 4)))
-  (check-null? (map/transposed (λ (i) (list i i)) '()))
-  (check-equal? (map/transposed (λ (i) (list i (* i i))) (range 4))
+  (require rackunit)
+  (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
+                '())
+  (check-equal? (map/transposed 2 (λ (i) (list i i)) '())
+                '[() ()])
+  (check-equal? (map/transposed 2 (λ (i) (list i (* i i))) (range 4))
                 (list (list 0 1 2 3)
                       (list 0 1 4 9))))
