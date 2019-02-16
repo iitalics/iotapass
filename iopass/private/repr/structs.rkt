@@ -1,11 +1,21 @@
 #lang racket/base
 (provide
- form-field-count)
+ ; misc. struct repr things
+ form-field-count
+
+ ; helpers for generate-structs
+ ; (NOTE: generate-structs is in the 'generate-structs-macro' submodule)
+ production-structure-defs
+ nonterminal-predicate-defs)
 
 (require
+ (for-template racket/base)
+ "../syntax/bindings.rkt"
  "../ast/decl.rkt"
+ "ids.rkt"
+ (only-in racket/syntax format-symbol)
  racket/match
- threading)
+ syntax/parse)
 
 ;; --------------------
 ;; number of fields in the struct representation of a production
@@ -26,63 +36,64 @@
         (count* after))]))
 
 ;; --------------------
-;; generate-structs macro
+;; helper functions for 'generate-structs'
 ;; --------------------
 
-;; put these helper functions in a submodule so they can be tested easily without
-;; compromising visibility.
-(module* generate-structs-helpers #f
-  (provide (all-defined-out))
-  (require
-   (for-template racket/base)
-   "ids.rkt"
-   "../syntax/bindings.rkt"
-   (only-in racket/list append-map)
-   (only-in racket/syntax format-symbol)
-   syntax/parse)
+;; language [listof [listof #'[<ctor-id> <pred-id> <proj-id>]]
+;; -> [listof stx]
+(define (production-structure-defs lang pr-id-tripless)
 
-  ;; language [listof [listof #'[<ctor-id> <pred-id> <proj-id>]]
-  ;; -> [listof stx]
-  (define (production-structure-defs lang pr-id-tripless)
-    (define lang-name (language-name lang))
+  (define ((production-struct-name nt) pr)
+    (format-symbol "~a.~a.~a"
+                   (language-name lang)
+                   (spec-description nt)
+                   (production-head-symbol pr)))
 
-    (for/list ([nt (in-list (language-nonterminals lang))]
-               [pr-id-triples (in-list pr-id-tripless)])
-      (define/syntax-parse [(ctor-id pred-id proj-id) ...] pr-id-triples)
-      (define/syntax-parse [(name-sym field-count) ...]
-        (for/list ([pr (in-list (nonterminal-spec-productions nt))])
-          (match-define (production _ head-sym fm) pr)
-          (define nt-name (spec-description nt))
-          (list (format-symbol "~a.~a.~a" lang-name nt-name head-sym)
-                (form-field-count fm))))
+  (for/list ([nt (in-list (language-nonterminals lang))]
+             [pr-id-triples (in-list pr-id-tripless)])
 
-      #'(define-values [ctor-id ... pred-id ... proj-id ...]
-          (let*-values ([(_1 ctor-id pred-id proj-id _2)
-                         (make-struct-type 'name-sym     ; name
-                                           #f            ; super
-                                           'field-count  ; # fields
-                                           0 #f '()      ; # auto, auto-v, props
-                                           #f            ; inspector (#f = transparent)
-                                           #f '() #f     ; proc-spec, immutables, guard
-                                           'name-sym)]   ; ctor name
-                        ...)
-            (values ctor-id ...
-                    pred-id ...
-                    proj-id ...)))))
+    (define/syntax-parse [name-sym ...]
+      (map (production-struct-name nt)
+           (nonterminal-spec-productions nt)))
 
-  ;; language [listof id] [listof [listof id]] -> [listof stx]
-  (define (nonterminal-predicate-defs nt-predicate-ids
-                                      pr-predicate-idss)
-    (for/list ([nt-pred-id (in-list nt-predicate-ids)]
-               [pr-pred-ids (in-list pr-predicate-idss)])
-      (define/syntax-parse nt? nt-pred-id)
-      (define/syntax-parse [pr? ...] pr-pred-ids)
-      #'(define (nt? x)
-          (or (pr? x)
-              ...)))))
+    (define/syntax-parse [field-count ...]
+      (map (λ (pr) (form-field-count (production-form pr)))
+           (nonterminal-spec-productions nt)))
 
-;; the generate-structs macro is in a submodule so that it can access above functions at
-;; phase 1
+    (define/syntax-parse [(ctor-id pred-id proj-id) ...]
+      pr-id-triples)
+
+    #'(define-values [ctor-id ... pred-id ... proj-id ...]
+        (let*-values ([(_1 ctor-id pred-id proj-id _2)
+                       (make-struct-type 'name-sym     ; name
+                                         #f            ; super
+                                         'field-count  ; # fields
+                                         0 #f '()      ; # auto, auto-v, props
+                                         #f            ; inspector (#f = transparent)
+                                         #f '() #f     ; proc-spec, immutables, guard
+                                         'name-sym)]   ; ctor name
+                      ...)
+          (values ctor-id ...
+                  pred-id ...
+                  proj-id ...)))))
+
+;; language [listof id] [listof [listof id]] -> [listof stx]
+(define (nonterminal-predicate-defs nt-predicate-ids
+                                    pr-predicate-idss)
+  (for/list ([nt-pred-id (in-list nt-predicate-ids)]
+             [pr-pred-ids (in-list pr-predicate-idss)])
+    (define/syntax-parse nt? nt-pred-id)
+    (define/syntax-parse [pr? ...] pr-pred-ids)
+    #'(define (nt? x)
+        (or (pr? x)
+            ...))))
+
+;; --------------------
+;; 'generate-structs' macro
+;; --------------------
+
+;; the generate-structs macro is in a submodule so that it can access the above functions
+;; at phase 1
 (module* generate-structs-macro racket/base
   (provide
    generate-structs)
@@ -91,7 +102,7 @@
    (for-syntax
     racket/base
     (rename-in syntax/parse [attribute @])
-    (submod ".." generate-structs-helpers)
+    (submod "..")
     "../syntax/bindings.rkt"))
 
   (define-syntax generate-structs
@@ -113,7 +124,6 @@
   (require
    rackunit
    racket/match
-   (submod ".." generate-structs-helpers)
    "ids.rkt"
    "../util/syntax.rkt")
 
@@ -139,7 +149,6 @@
                                                  '()))
                             '()))
                 1)
-
 
   (require "../util/example-language-decls.rkt")
 
