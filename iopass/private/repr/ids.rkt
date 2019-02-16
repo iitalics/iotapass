@@ -49,35 +49,30 @@
   (require
    rackunit
    racket/match
-   "../syntax/util.rkt")
-
-  (define pr-a (production #'a 'a '...))
-  (define pr-b (production #'b 'b '...))
-  (define pr-c (production #'c 'c '...))
-  (define nt-x (nonterminal-spec #'x '(x) (list pr-a pr-b)))
-  (define nt-y (nonterminal-spec #'y '(y) (list pr-c)))
+   "../syntax/util.rkt"
+   "../util/example-language-decls.rkt")
 
   (define lr-ids
     (make-language-repr-ids
-     (list nt-x nt-y)
-     (hasheq nt-x #'x?
-             nt-y #'y?)
-     (hasheq nt-x (list #'[a.ctor a.pred a.acc]
-                        #'[b.ctor b.pred b.acc])
-             nt-y (list #'[c.ctor c.pred c.acc]))))
+     (list nt-ab nt-c)
+     (hasheq nt-ab #'ab?
+             nt-c  #'c?)
+     (hasheq nt-ab (list #'[A.c A? A.ref]
+                         #'[B.c B? B.ref])
+             nt-c  (list #'[C.c C? C.ref]))))
 
   (check-match (language-repr-ids-predicates lr-ids)
-               (hash-table [(== nt-x eq?) (free-id= x?)]
-                           [(== nt-y eq?) (free-id= y?)]))
+               (hash-table [(== nt-ab eq?) (free-id= ab?)]
+                           [(== nt-c  eq?) (free-id= c?)]))
 
   (check-match (language-repr-ids-productions lr-ids)
                (hash-table
-                [(== pr-a eq?) (list (free-id= a.ctor)
-                                     (free-id= a.pred)
-                                     (free-id= a.acc))]
-                [(== pr-b eq?) (list (free-id= b.ctor)
-                                     (free-id= b.pred)
-                                     (free-id= b.acc))]
-                [(== pr-c eq?) (list (free-id= c.ctor)
-                                     (free-id= c.pred)
-                                     (free-id= c.acc))])))
+                [(== pr-A eq?) (list (free-id= A.c)
+                                     (free-id= A?)
+                                     (free-id= A.ref))]
+                [(== pr-B eq?) (list (free-id= B.c)
+                                     (free-id= B?)
+                                     (free-id= B.ref))]
+                [(== pr-C eq?) (list (free-id= C.c)
+                                     (free-id= C?)
+                                     (free-id= C.ref))])))

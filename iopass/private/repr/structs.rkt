@@ -140,40 +140,28 @@
                             '()))
                 1)
 
-  ;; (define-language L
-  ;;   [x y ::= (A x) (B x y)]
-  ;;   [z   ::= (C)])
-  (let* ([fm-x-y (form-list #'(x y)
-                            (list (metavar #'x 'x)
-                                  (metavar #'y 'y))
-                            #f
-                            '())]
-         [pr-A (production #'(A x) 'A (metavar #'x 'x))]
-         [pr-B (production #'(B x y) 'B fm-x-y)]
-         [pr-C (production #'(C) 'C (form-list #'() '() #f '()))]
-         [nt-xy (nonterminal-spec #'xy '(x y) (list pr-A pr-B))]
-         [nt-z (nonterminal-spec #'z '(z) (list pr-C))]
-         [L (make-language #'L 'L '() (list nt-xy nt-z))])
 
-    (check-match
-     (map syntax->datum
-          (production-structure-defs
-           L
-           (list (list #'[A.c A? A.ref]
-                       #'[B.c B? B.ref])
-                 (list #'[C.c C? C.ref]))))
-     `{(define-values [A.c B.c A? B? A.ref B.ref]
-         (let*-values ([(_1 A.c A? A.ref _2) (make-struct-type 'L.x/y.A #f '1 ,_ ...)]
-                       [(_1 B.c B? B.ref _2) (make-struct-type 'L.x/y.B #f '2 ,_ ...)])
-           (values A.c B.c A? B? A.ref B.ref)))
-       (define-values [C.c C? C.ref]
-         (let*-values ([(_1 C.c C? C.ref _2) (make-struct-type 'L.z.C #f '0 ,_ ...)])
-           (values C.c C? C.ref)))})
+  (require "../util/example-language-decls.rkt")
 
-    (check-match
-     (map syntax->datum
-          (nonterminal-predicate-defs (list #'xy? #'z?)
-                                      (list (list #'A? #'B?)
-                                            (list #'C?))))
-     `((define (xy? x) (or (A? x) (B? x)))
-       (define (z?  x) (or (C? x)))))))
+  (check-match
+   (map syntax->datum
+        (production-structure-defs
+         L
+         (list (list #'[A.c A? A.ref]
+                     #'[B.c B? B.ref])
+               (list #'[C.c C? C.ref]))))
+   `{(define-values [A.c B.c A? B? A.ref B.ref]
+       (let*-values ([(_1 A.c A? A.ref _2) (make-struct-type 'L.a/b.A #f '1 ,_ ...)]
+                     [(_1 B.c B? B.ref _2) (make-struct-type 'L.a/b.B #f '2 ,_ ...)])
+         (values A.c B.c A? B? A.ref B.ref)))
+     (define-values [C.c C? C.ref]
+       (let*-values ([(_1 C.c C? C.ref _2) (make-struct-type 'L.c.C #f '0 ,_ ...)])
+         (values C.c C? C.ref)))})
+
+  (check-match
+   (map syntax->datum
+        (nonterminal-predicate-defs (list #'ab? #'c?)
+                                    (list (list #'A? #'B?)
+                                          (list #'C?))))
+   `((define (ab? x) (or (A? x) (B? x)))
+     (define (c?  x) (or (C? x))))))
