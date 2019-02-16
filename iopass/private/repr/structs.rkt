@@ -105,7 +105,7 @@
            #,@(production-structure-defs (@ language)
                                          (@ pr-triple))
            #,@(nonterminal-predicate-defs (@ nt?)
-                                          (@ pr-c)))])))
+                                          (@ pr-p)))])))
 
 ;; =======================================================================================
 
