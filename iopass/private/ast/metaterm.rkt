@@ -2,10 +2,6 @@
 (provide
  (all-defined-out))
 
-(require
- (for-template
-  (only-in racket/base quote)))
-
 ;; =======================================================================================
 
 ;; A 'metaterm' generalizes the syntax of a pattern and a template. Both positions contain
@@ -16,11 +12,10 @@
 ;; templates.
 
 ;; metaterm ::=
-;;   (unquoted syntax)
+;;   (unquoted syntax spec)
+;;   (datum syntax terminal-spec)
 ;;   (prod production [listof metaterm])
 ;;   [listof metaterm]
-(struct unquoted [stx] #:transparent)
+(struct unquoted [stx spec] #:transparent)
+(struct datum [stx spec] #:transparent)
 (struct prod [prod args] #:transparent)
-
-(define (datum stx)
-  (unquoted #`(quote #,stx)))

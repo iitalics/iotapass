@@ -27,18 +27,18 @@
 (define (parse-mt/terminal tm stx)
   (syntax-parse stx
     [({~datum unquote} e)
-     (mt:unquoted #'e)]
+     (mt:unquoted #'e tm)]
 
     [d
      #:fail-when (or (null? (syntax-e #'d)) (pair? (syntax-e #'d)))
      "list datum not allowed"
-     (mt:datum #'d)]))
+     (mt:datum #'d tm)]))
 
 ;; nonterminal-spec language syntax -> mt:metaterm
 (define (parse-mt/nonterminal nt lang stx)
   (syntax-parse stx
     [({~datum unquote} e)
-     (mt:unquoted #'e)]
+     (mt:unquoted #'e nt)]
 
     [(head . body)
      #:declare head (c:known-production-id nt)

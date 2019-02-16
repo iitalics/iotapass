@@ -62,24 +62,60 @@
 
 (define-syntax template
   (syntax-parser
-    [(_ :lang+mv tmpl)
-     (compile-template (@ repr-ids)
+    [(hd :lang+mv tmpl)
+     (compile-template #'hd
+                       (@ repr-ids)
                        (parse-mt (@ spec)
                                  (@ language)
                                  #'tmpl))]))
 
 (begin-for-syntax
-  ;; language-repr-ids metaterm -> syntax
-  (define (compile-template repr-ids mt)
+  ;; syntax language-repr-ids metaterm -> syntax
+  (define (compile-template macro-head repr-ids mt)
     (define pr=>ids (language-repr-ids-productions repr-ids))
     (let compile1 ([mt mt])
       (match mt
-        [(mt:unquoted stx) stx]
+        [(mt:unquoted stx s)
+         (make-spec-protect repr-ids macro-head s stx)]
+        [(mt:datum stx s)
+         (make-spec-protect repr-ids macro-head s #`'#,stx)]
         [(mt:prod pr args)
          (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
          #`(ctor #,@(map compile1 args))]
         [(list mts ...)
-         #`(vector-immutable #,@(map compile1 mts))]))))
+         #`(vector-immutable #,@(map compile1 mts))])))
+
+  ;; language-repr-ids syntax spec syntax -> syntax
+  (define (make-spec-protect repr-ids macro-head s value-stx)
+    #`(protect-value '#,macro-head
+                     #,(spec-predicate s repr-ids)
+                     '#,(spec-expectation-string s)
+                     #,value-stx))
+
+  ;; spec language-repr-ids -> identifier
+  (define (spec-predicate s repr-ids)
+    (match s
+      [(? nonterminal-spec? nt)
+       (hash-ref (language-repr-ids-predicates repr-ids) nt)]
+      [(? terminal-spec? tm)
+       (terminal-spec-contract-id tm)]))
+
+  ;; spec -> string
+  (define (spec-expectation-string s)
+    (match s
+      [(? nonterminal-spec? nt)
+       (format "nonterminal '~a'" (spec-description nt))]
+      [(? terminal-spec? tm)
+       (symbol->string (syntax-e (terminal-spec-contract-id tm)))])))
+
+;; any [any -> bool | X] string any -> X
+(define (protect-value macro-head
+                       predicate
+                       expect-string
+                       value)
+  (if (predicate value)
+    value
+    (raise-argument-error macro-head expect-string value)))
 
 ;; =======================================================================================
 
@@ -136,6 +172,10 @@
   ; unquoted
   (check-eqv? (template (L i) ,(+ 5 6)) 11)
   (check-eq? (template (L e) ,e-5) e-5)
+  (check-exn #px"template: contract violation\n  expected: integer\\?"
+             (λ () (template (L i) ,"not a number")))
+  (check-exn #px"template: contract violation\n  expected: nonterminal 'e'"
+             (λ () (template (L e) ,'|not an expr|)))
 
   ; datum
   (check-eqv? (template (L i) 5)  5)
@@ -146,6 +186,8 @@
   (check-exn #px"list datum not allowed"
              (λ () (convert-compile-time-error
                     (template (L i) ()))))
+  (check-exn #px"template: contract violation\n  expected: symbol\\?"
+             (λ () (template (L x) "not a symbol")))
 
   ; productions
   ; - basic forms
