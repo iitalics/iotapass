@@ -115,7 +115,7 @@
    racket/match
    (submod ".." generate-structs-helpers)
    "ids.rkt"
-   "../syntax/util.rkt")
+   "../util/syntax.rkt")
 
   ;; (x y z ... [w])
   (check-equal? (form-field-count

@@ -8,7 +8,7 @@
   (rename-in syntax/parse [attribute @])
   (prefix-in c: "../syntax/classes.rkt")
   "../syntax/bindings.rkt"
-  "../syntax/parse-metaterm.rkt"
+  "../syntax/metaterm.rkt"
   "../repr/template.rkt"
   "../repr/ids.rkt"))
 

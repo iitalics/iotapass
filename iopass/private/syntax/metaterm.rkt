@@ -119,7 +119,7 @@
   (require
    rackunit
    "../util/example-language-decls.rkt"
-   "util.rkt")
+   "../util/syntax.rkt")
 
   (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
                 '())

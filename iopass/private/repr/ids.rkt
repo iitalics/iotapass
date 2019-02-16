@@ -49,7 +49,7 @@
   (require
    rackunit
    racket/match
-   "../syntax/util.rkt"
+   "../util/syntax.rkt"
    "../util/example-language-decls.rkt")
 
   (define lr-ids
