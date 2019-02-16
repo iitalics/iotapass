@@ -63,34 +63,38 @@
 (define-syntax template
   (syntax-parser
     [(hd :lang+mv tmpl)
-     (compile-template #'hd
+     (compile-template #'tmpl
+                       #'hd
                        (@ repr-ids)
                        (parse-mt (@ spec)
                                  (@ language)
                                  #'tmpl))]))
 
 (begin-for-syntax
-  ;; syntax language-repr-ids metaterm -> syntax
-  (define (compile-template macro-head repr-ids mt)
+  ;; syntax syntax language-repr-ids metaterm -> syntax
+  (define (compile-template src-stx macro-head repr-ids mt)
     (define pr=>ids (language-repr-ids-productions repr-ids))
     (let compile1 ([mt mt])
       (match mt
         [(mt:unquoted stx s)
-         (make-spec-protect repr-ids macro-head s stx)]
+         (make-spec-protect repr-ids src-stx macro-head s stx)]
         [(mt:datum stx s)
-         (make-spec-protect repr-ids macro-head s #`'#,stx)]
+         (make-spec-protect repr-ids src-stx macro-head s #`'#,stx)]
         [(mt:prod pr args)
          (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
-         #`(ctor #,@(map compile1 args))]
+         (quasisyntax/loc src-stx
+           (ctor #,@(map compile1 args)))]
         [(list mts ...)
-         #`(vector-immutable #,@(map compile1 mts))])))
+         (quasisyntax/loc src-stx
+           (vector-immutable #,@(map compile1 mts)))])))
 
-  ;; language-repr-ids syntax spec syntax -> syntax
-  (define (make-spec-protect repr-ids macro-head s value-stx)
-    #`(protect-value '#,macro-head
+  ;; language-repr-ids syntax syntax spec syntax -> syntax
+  (define (make-spec-protect repr-ids src-stx macro-head s value-stx)
+    (quasisyntax/loc src-stx
+      (protect-value '#,macro-head
                      #,(spec-predicate s repr-ids)
                      '#,(spec-expectation-string s)
-                     #,value-stx))
+                     #,value-stx)))
 
   ;; spec language-repr-ids -> identifier
   (define (spec-predicate s repr-ids)
