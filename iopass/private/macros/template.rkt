@@ -77,7 +77,9 @@
         [(mt:unquoted stx) stx]
         [(mt:prod pr args)
          (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
-         #`(ctor #,@(map compile1 args))]))))
+         #`(ctor #,@(map compile1 args))]
+        [(list mts ...)
+         #`(vector-immutable #,@(map compile1 mts))]))))
 
 ;; =======================================================================================
 
@@ -99,7 +101,8 @@
        (num . i)
        (if e e e)
        (op s e ...)
-       (print e)]
+       (print e)
+       (let ([x e] ...) e)]
     [d ::= (def x e)])
 
   ;; ---------------
@@ -145,9 +148,17 @@
                     (template (L i) ()))))
 
   ; productions
+  ; - basic forms
   (check-equal? (template (L e) (num . 5)) e-5)
+  ; - form-list (no arguments)
   (check-equal? (template (L e) (pi)) e-pi)
+  ; - form-list (constant arguments)
   (check-equal? (template (L d) (def twelve ,e-+)) d-twelve)
+  ; - form-list (variadic arguments; no ellipsis in template)
+  (check-equal? (template (L e) (op "+" (num . 5) ,e-7)) e-+)
+  (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
+                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+)))
+  ; - arity errors
   (check-exn #px"expected 2 arguments, got 1"
              (λ () (convert-compile-time-error
                     (template (L d) (def twelve)))))

@@ -18,6 +18,7 @@
 ;; metaterm ::=
 ;;   (unquoted syntax)
 ;;   (prod production [listof metaterm])
+;;   [listof metaterm]
 (struct unquoted [stx] #:transparent)
 (struct prod [prod args] #:transparent)
 

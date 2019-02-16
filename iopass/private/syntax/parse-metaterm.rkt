@@ -10,7 +10,8 @@
  "../ast/decl.rkt"
  (rename-in syntax/parse [attribute @])
  racket/match
- racket/list)
+ racket/list
+ threading)
 
 ;; =======================================================================================
 
@@ -63,6 +64,9 @@
 ;; [listof form] (or #f ellipsis) [listof form] language syntax
 ;;   -> [listof mt:metaterm]
 (define (parse-mt/list before repeat after lang stx)
+  (define (parse/form fm stx)
+    (parse-mt/form fm lang stx))
+
   (syntax-parse stx
     [(e ...)
      ; check arity
@@ -77,15 +81,44 @@
              n-min (plural n-min) n-args)
 
      (match repeat
-       [(ellipsis rep-fm)
-        (raise-syntax-error #f
-          "UNIMPLEMENTED: metaterms for forms with ellipsis"
-          stx)]
-
        [#f
-        (append-map (λ (fm stx) (parse-mt/form fm lang stx))
+        (append-map parse/form
                     (append before after)
-                    (@ e))])]))
+                    (@ e))]
+
+       [(ellipsis rep-fm)
+        (define (parse/rep-form stx)
+          (parse-mt/form rep-fm lang stx))
+        (define n-before (length before))
+        (define n-mid (- n-args n-min))
+        (let*-values (; split syntax into (before ... middle ... after ...)
+                      [(before-stxs next-stxs) (split-at (@ e) n-before)]
+                      [(middle-stxs after-stxs) (split-at next-stxs n-mid)]
+                      ; parse syntax recursively; middle needs to be "transposed"
+                      [(before-mts) (append-map parse/form before before-stxs)]
+                      [(middle-mts) (map/transposed parse/rep-form middle-stxs)]
+                      [(after-mts) (append-map parse/form after after-stxs)])
+          (append before-mts
+                  middle-mts
+                  after-mts))])]))
 
 (define (plural n)
   (if (= n 1) "" "s"))
+
+;; [X -> [List Y ...]] [Listof X] -> [List [Listof Y] ...]
+(define/match (map/transposed f l)
+  [{_ '()}         '()]
+  [{_ (list x)}    (map list (f x))]
+  [{_ (cons x xs)} (map cons (f x) (map/transposed f xs))])
+
+(module+ test
+  (require
+   rackunit
+   "util.rkt")
+
+  (define-syntax-rule (check-null? x) (check-equal? x '()))
+  (check-null? (map/transposed (λ (i) '()) (range 4)))
+  (check-null? (map/transposed (λ (i) (list i i)) '()))
+  (check-equal? (map/transposed (λ (i) (list i (* i i))) (range 4))
+                (list (list 0 1 2 3)
+                      (list 0 1 4 9))))
