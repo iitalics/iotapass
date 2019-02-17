@@ -23,7 +23,7 @@
     (match (ast:spec-set-metavars ss)
       [(ast:spec-repeated-metavar-error stx x)
        (raise-syntax-error #f
-         (format "metavariable '~a' defined multiple times" x)
+         "metavariable defined multiple times"
          stx)]
       [mvs
        mvs])))
@@ -99,7 +99,9 @@
 
   (require
    (prefix-in r: racket/base)
-   racket/match)
+   racket/match
+   syntax/macro-testing
+   rackunit)
 
   (define equal?
     ; (for testing hygiene)
@@ -115,10 +117,6 @@
   (define-terminals T1
     [binary ::= [+ - * /]])
 
-  #;
-  (define-terminals T-bad1
-    [i j i ::= integer?])
-
   (define-language L0
     #:terminals T0
     [e ::=
@@ -127,16 +125,26 @@
     [df ::=
         (def x e)])
 
-  #;
-  (define-language L-bad1
-    #:terminals T0
-    [e f ::= (num i)]
-    [e ::= ($ s)])
+  (check-exn #px"i: metavariable defined multiple times"
+             (λ () (convert-compile-time-error
+                    (let ()
+                      (define-terminals T-bad1
+                        [i j i ::= integer?])))))
 
-  #;
-  (define-language L-bad2
-    #:terminals T0
-    [e ::= (num k)])
+  (check-exn #px"e: metavariable defined multiple times"
+             (λ () (convert-compile-time-error
+                    (let ()
+                      (define-language L-bad1
+                        #:terminals T0
+                        [e f ::= (num i)]
+                        [e ::= ($ s)])))))
+
+  (check-exn #px"k: metavariable unbound"
+             (λ () (convert-compile-time-error
+                    (let ()
+                      (define-language L-bad2
+                        #:terminals T0
+                        [e ::= (num k)])))))
 
   ;; =================================================================
 
@@ -205,9 +213,6 @@
 
   ;; =================================================================
 
-  (require
-   rackunit)
-
   (define-syntax terminal-def-stuff
     (syntax-parser
       [(_ b:terminals-definition-binding)
@@ -220,7 +225,7 @@
   ;; ---------------------
   ;; Runtime tests
 
-  (let (;; screw with hygiene:
+  (let (; screw with hygiene:
         [integer? boolean?])
 
     ; Check T0 generates the right identifiers
