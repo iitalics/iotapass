@@ -47,7 +47,7 @@
                              lang
                              #'body))]))
 
-;; form language syntax -> [listof mt:metaterm]
+;; form language syntax -> mt:metaterm
 (define (parse-mt/form fm lang stx)
   (match fm
     [(form-list _ before repeat after)
@@ -57,16 +57,13 @@
        (raise-syntax-error #f
          "reference to undefined metavar: SHOULD BE IMPOSSIBLE"
          mv-orig-stx))
-     (list (parse-mt (language-lookup-metavar lang x mv-fail)
-                     lang
-                     stx))]))
+     (parse-mt (language-lookup-metavar lang x mv-fail)
+               lang
+               stx)]))
 
 ;; [listof form] (or #f ellipsis) [listof form] language syntax
-;;   -> [listof mt:metaterm]
+;;   -> mt:metaterm (specifically: mt:multiple)
 (define (parse-mt/list before repeat after lang stx)
-  (define (parse/form fm stx)
-    (parse-mt/form fm lang stx))
-
   (syntax-parse stx
     [(e ...)
      ; check arity
@@ -84,27 +81,29 @@
            (define-values [before-stxs next-stxs]
              (split-at (@ e) (length before)))
            (define-values [middle-stxs after-stxs]
-             (split-at next-stxs (- n-args n-min)))]
+             (split-at next-stxs (- n-args n-min)))
 
-     (append (append-map parse/form before before-stxs)
+           ; recur on subexpressions
+           (define (parse/form fm stx) (parse-mt/form fm lang stx))
+           (define before-mts
+             (map parse/form before before-stxs))
+           (define middle-mts
              (match repeat
                [#f '()]
                [(ellipsis rep-fm)
-                (map/transposed (form-field-count rep-fm)
-                                (λ (stx) (parse-mt/form rep-fm lang stx))
-                                middle-stxs)])
-             (append-map parse/form after after-stxs))]))
+                (define (parse/rep stx) (parse-mt/form rep-fm lang stx))
+                (list (mt:build (form-field-count rep-fm)
+                                (map parse/rep middle-stxs)))]))
+           (define after-mts
+             (map parse/form after after-stxs))]
+
+     (mt:multiple
+      (append before-mts
+              middle-mts
+              after-mts))]))
 
 (define (plural n)
   (if (= n 1) "" "s"))
-
-;; (n : nat) [X -> (list Y ...n)] [listof X] -> (list [listof Y] ...n)
-(define (map/transposed n f l)
-  (if (null? l)
-    (make-list n '())
-    (map cons
-         (f (car l))
-         (map/transposed n f (cdr l)))))
 
 (module+ test
   (require
@@ -112,19 +111,18 @@
    "../util/example-language-decls.rkt"
    "../util/syntax.rkt")
 
-  (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
-                '())
-  (check-equal? (map/transposed 2 (λ (i) (list i i)) '())
-                '[() ()])
-  (check-equal? (map/transposed 2 (λ (i) (list i (* i i))) (range 4))
-                (list (list 0 1 2 3)
-                      (list 0 1 4 9)))
+  (check-match
+   (parse-mt/nonterminal nt-ab L #'(A . ,(mk-a)))
+   (mt:prod (== pr-A)
+            (mt:unquoted (stx: (mk-a))
+                         (== nt-ab))))
 
-  (check-match (parse-mt/form fm-x-c
-                              L
-                              #'[foo (C) ,c2 ,c3])
-               (list
-                (mt:datum (app syntax-e (== 'foo)) (== tm-xy eq?))
-                (list (mt:prod (== pr-C eq?) '())
-                      (mt:unquoted (free-id= c2) (== nt-c eq?))
-                      (mt:unquoted (free-id= c3) (== nt-c eq?))))))
+  (check-match
+   (parse-mt/form fm-x-c L #'[foo (C) ,c2 ,c3])
+   (mt:multiple
+    (list (mt:datum (free-id= foo)
+                    (== tm-xy))
+          (mt:build 1
+                    (list (mt:prod (== pr-C eq?) (mt:multiple '()))
+                          (mt:unquoted (stx: c2) (== nt-c))
+                          (mt:unquoted (stx: c3) (== nt-c))))))))
