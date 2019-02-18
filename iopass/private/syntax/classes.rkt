@@ -10,13 +10,6 @@
  nonterminal-metavar-id
  terminal-metavar-id
  known-production-id)
- ; for templates
-#;
- terminal-template
-#;
- nonterminal-template
-#;
- form-template
 
 (require
  (prefix-in ast: "../ast/decl.rkt")
@@ -206,85 +199,3 @@
     (check-exn #px"q: not a production of nonterminal 'e'"
                (λ () (syntax-parse #'q
                        [{~var Q (known-production-id nt-e)} 0])))))
-
-#|
-;; -------------------------------------------
-;; patterns for 'template' macros
-;; -------------------------------------------
-
-(define-syntax-rule (value-attr (sc sc-args ...))
-  (syntax-parse this-syntax
-    [{~var || (sc sc-args ...)}
-     (@ value)]))
-
-;; <terminal-template> ::=
-;;   (unquote <expr>)
-;;   <datum>
-;;
-;; tm : ast:terminal-spec
-;; (@ value) : ast:t:template-node
-(define-syntax-class (terminal-template tm)
-  #:description (format "terminal '~a' template"
-                        (ast:spec-description tm))
-  #:attributes (value)
-  [pattern ({~datum unquote} e)
-           #:attr value (ast:t:unquoted #'e)]
-  [pattern d
-           #:fail-when (or (null? (syntax-e #'d)) (pair? (syntax-e #'d)))
-           "list datum not allowed"
-           #:attr value (ast:t:datum #'d)])
-
-;; <nonterminal-template> ::=
-;;   (unquote <expr>)
-;;   (<head-sym> . <form-template>)
-;;
-;; nt : ast:nonterminal-spec
-;; (@ value) : ast:t:template
-(define-syntax-class (nonterminal-template nt)
-  #:description (format "nonterminal '~a' template"
-                        (ast:spec-description nt))
-  #:attributes (value)
-  [pattern ({~datum unquote} e)
-           #:attr value (ast:t:unquoted #'e)]
-
-  [pattern (head . tmpl)
-           #:declare head (known-production-id nt)
-           #:declare tmpl (form-template (ast:production-form (@ head.production)))
-           #:attr value (ast:t:prod (@ head.production)
-                                    (@ tmpl.value))])
-
-;; <form-list-template> ::=
-;;   (<form-template> ...)
-;;   (<form-template> ... <form-template> ooo <form-template> ...)
-;;
-;; lang : ast:language
-;; before : [listof ast:form]
-;; repeat : (or #f ast:ellipsis)
-;; after : [listof ast:form]
-;; (@ value) : [listof ast:t:template]
-(define-syntax-class (form-list-template before repeat after)
-  #:description "parenthesized list template"
-  #:attributes (value)
-  [pattern ()
-           #:attr value '()])
-
-;; <form-template> ::=
-;;   <terminal-template>     if 'fm' is a terminal metavar
-;;   <nonterminal-template>  if 'fm' is a nonterminal metavar
-;;   <form-list-template>    if 'fm' is a form-list
-;;
-;; fm : ast:form
-;; (@ value) : [listof ast:t:template]
-(define-syntax-class (form-template fm)
-  #:description "template"
-  #:attributes (value)
-  [pattern _
-           #:attr value
-           (match fm
-             [(ast:form-list _ before repeat after)
-              (value-attr (form-list-template before repeat after))]
-             [(ast:metavar _ mv)
-              (raise-syntax-error #f
-                "metavariables unimplemented"
-                this-syntax)])])
-|#
