@@ -65,6 +65,16 @@
 ;;   -> mt:metaterm (specifically: mt:multiple)
 (define (parse-mt/list before repeat after lang stx)
   (syntax-parse stx
+    [({~datum unquote} _)
+     #:cut
+     #:fail-when #t "cannot unquote here, expected a parenthesized list"
+     (void)]
+
+    [{~not (_ ...)}
+     #:cut
+     #:fail-when #t "expected a parenthesized list"
+     (void)]
+
     [(e ...)
      ; check arity
      #:do [(define n-args (length (@ e)))
@@ -128,6 +138,10 @@
                              #f
                              (list (metavar #'y 'y))))
 
+  (check-exn #px"foo: expected a parenthesized list"
+             (λ () (parse-mt/form fm-x-c L #'foo)))
+  (check-exn #px"cannot unquote here, expected a parenthesized list\n  at: \\(unquote foo\\)"
+             (λ () (parse-mt/form fm-x-c L #',foo)))
   (check-exn #px"list datum not allowed"
              (λ () (parse-mt/terminal tm-i #'(1 2))))
   (check-exn #px"list datum not allowed"
