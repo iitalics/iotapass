@@ -63,8 +63,22 @@
                stx)]))
 
 ;; [listof form] (or #f ellipsis) [listof form] language syntax
-;;   -> mt:metaterm (specifically: mt:multiple)
+;;   -> mt:metaterm  (specifically mt:multiple)
 (define (parse-mt/list before repeat after lang stx)
+
+  ;; form syntax -> mt:metaterm
+  (define (parse/form fm stx)
+    (parse-mt/form fm lang stx))
+
+  ;; form [listof (or syntax e)] -> mt:metaterm  (specifically mt:build)
+  (define (parse/rep rep-fm terms)
+    (mt:build
+     (form-field-count rep-fm)
+     (for/list ([t (in-list terms)])
+       (match t
+         [(e stx) (raise-syntax-error #f "UNIMPLEMENTED: ellipsis" stx)]
+         [stx (parse/form rep-fm stx)]))))
+
   (syntax-parse stx
     [({~datum unquote} _)
      #:cut
@@ -77,13 +91,13 @@
      (void)]
 
     [(raw ...)
-     ; parse ellipsis following terms
+     ; parse terms followed by ellipsis
      #:do [(define terms (parse-list+ellipsis (@ raw)))]
 
      ; check arity
-     #:do [(define n-args (length terms))
-           (define n-min (+ (length before)
-                            (length after)))]
+     #:do [(define n-args   (length terms))
+           (define n-min    (+ (length before) (length after)))
+           (define n-middle (- n-args n-min))]
      #:fail-unless (or repeat (= n-args n-min))
      (format "expected ~a argument~a, got ~a"
              n-min (plural n-min) n-args)
@@ -91,44 +105,34 @@
      (format "expected at least ~a argument~a, got ~a"
              n-min (plural n-min) n-args)
 
-     ; TODO: implement them
-     #:do [(for ([term (in-list terms)])
-             (when (e? term)
-               (raise-syntax-error #f
-                 "ellipsis metaterms unimplemented"
-                 (e-syntax term))))]
-
-     #:do [; split syntax into before/middle/after
-           (define-values [before-stxs next-stxs]
+     ; split syntax into before/middle/after
+     #:do [(define-values [before-terms next-terms]
              (split-at terms (length before)))
-           (define-values [middle-stxs after-stxs]
-             (split-at next-stxs (- n-args n-min)))
+           (define-values [middle-terms after-terms]
+             (split-at next-terms n-middle))]
 
-           ; recur on subexpressions
-           (define (parse/form fm stx) (parse-mt/form fm lang stx))
-           (define before-mts
-             (map parse/form before before-stxs))
-           (define middle-mts
-             (match repeat
-               [#f '()]
-               [(ellipsis rep-fm)
-                (define (parse/rep stx) (parse-mt/form rep-fm lang stx))
-                (list (mt:build (form-field-count rep-fm)
-                                (map parse/rep middle-stxs)))]))
-           (define after-mts
-             (map parse/form after after-stxs))]
+     ; disallow ellipsis in before/after terms
+     #:fail-when (for/or ([t (in-sequences
+                              (in-list before-terms)
+                              (in-list after-terms))])
+                   (and (e? t) (e-syntax t)))
+     "term may not be a repetition"
 
      (mt:multiple
-      (append before-mts
-              middle-mts
-              after-mts))]))
+      (append (map parse/form before before-terms)
+              (map (λ (r) (parse/rep r middle-terms)) (ellipsis->list repeat))
+              (map parse/form after after-terms)))]))
 
-;; [listof syntax] -> [listof (or syntax (ellipsis syntax))]
+;; e ::= (e syntax)
+; Indicates that the inner syntax is followed by an [e]llipsis. See 'parse-list+ellipsis'
+; return value.
+(struct e [syntax] #:transparent)
+
+;; [listof syntax] -> [listof (or syntax e)]
 ; Wrap each syntax in the list which is followed by '...' in the (e ..) struct. Raises
 ; error for ellipsis in initial position, or two ellipsis in a row.
 ;   (parse-list+ellipsis (list #'x #'y #'... #'z]) =
 ;   (list #'x (e #'y) #'z)
-(struct e [syntax] #:transparent)
 (define (parse-list+ellipsis stxs)
   (let loop ([stxs stxs] [preceding #f])
     (match* {stxs preceding}
@@ -208,9 +212,9 @@
              (λ () (parse-mt/form fm-x-c L #'foo)))
   (check-exn #px"cannot unquote here, expected a parenthesized list\n  at: \\(unquote foo\\)"
              (λ () (parse-mt/form fm-x-c L #',foo)))
-  (check-exn #px"list datum not allowed"
+  (check-exn #px"list datum not allowed\n  at: \\(1 2\\)"
              (λ () (parse-mt/terminal tm-i #'(1 2))))
-  (check-exn #px"list datum not allowed"
+  (check-exn #px"list datum not allowed\n  at: \\(\\)"
              (λ () (parse-mt/terminal tm-i #'())))
   (check-exn #px"expected 2 arguments, got 1"
              (λ () (parse-mt/form fm-x-y L #'[foo])))
@@ -222,6 +226,10 @@
              (λ () (parse-mt/form fm-x-c L #'())))
   (check-exn #px"expected at least 2 arguments, got 1"
              (λ () (parse-mt/form fm-x-x-y* L #'[,foo ooo])))
+  (check-exn #px"term may not be a repetition\n  at: foo"
+             (λ () (parse-mt/form fm-x-x-y* L #'[foo ooo bar])))
+  (check-exn #px"term may not be a repetition\n  at: bar"
+             (λ () (parse-mt/form fm-x-y^ L #'[foo bar ooo])))
 
   (check-match
    (parse-mt/nonterminal nt-ab L #'(A . ,(mk-a)))
