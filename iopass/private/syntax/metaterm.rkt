@@ -80,29 +80,20 @@
      (format "expected at least ~a argument~a, got ~a"
              n-min (plural n-min) n-args)
 
-     (match repeat
-       [#f
-        (append-map parse/form
-                    (append before after)
-                    (@ e))]
+     #:do [; split syntax into before/middle/after
+           (define-values [before-stxs next-stxs]
+             (split-at (@ e) (length before)))
+           (define-values [middle-stxs after-stxs]
+             (split-at next-stxs (- n-args n-min)))]
 
-       [(ellipsis rep-fm)
-        (define (parse/rep-form stx)
-          (parse-mt/form rep-fm lang stx))
-        (define n-before (length before))
-        (define n-mid (- n-args n-min))
-        (let*-values (; split syntax into (before ... middle ... after ...)
-                      [(before-stxs next-stxs) (split-at (@ e) n-before)]
-                      [(middle-stxs after-stxs) (split-at next-stxs n-mid)]
-                      ; parse syntax recursively; middle needs to be "transposed"
-                      [(before-mts) (append-map parse/form before before-stxs)]
-                      [(middle-mts) (map/transposed (form-field-count rep-fm)
-                                                    parse/rep-form
-                                                    middle-stxs)]
-                      [(after-mts) (append-map parse/form after after-stxs)])
-          (append before-mts
-                  middle-mts
-                  after-mts))])]))
+     (append (append-map parse/form before before-stxs)
+             (match repeat
+               [#f '()]
+               [(ellipsis rep-fm)
+                (map/transposed (form-field-count rep-fm)
+                                (λ (stx) (parse-mt/form rep-fm lang stx))
+                                middle-stxs)])
+             (append-map parse/form after after-stxs))]))
 
 (define (plural n)
   (if (= n 1) "" "s"))
