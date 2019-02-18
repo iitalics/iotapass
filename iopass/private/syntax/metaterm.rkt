@@ -9,6 +9,7 @@
  (prefix-in mt: "../ast/metaterm.rkt")
  (only-in "../repr/structs.rkt" form-field-count)
  "../ast/decl.rkt"
+ "../util/syntax.rkt"
  (rename-in syntax/parse [attribute @])
  racket/match
  racket/list)
@@ -112,14 +113,64 @@
               middle-mts
               after-mts))]))
 
+;; [listof syntax] -> [listof (or syntax (ellipsis syntax))]
+; Wrap each syntax in the list which is followed by '...' in the (e ..) struct. Raises
+; error for ellipsis in initial position, or two ellipsis in a row.
+;   (parse-list+ellipsis (list #'x #'y #'... #'z]) =
+;   (list #'x (e #'y) #'z)
+(struct e [syntax] #:transparent)
+(define (parse-list+ellipsis stxs)
+  (let loop ([stxs stxs] [preceding #f])
+    (match* {stxs preceding}
+      ; end of list
+      [{'() #f}    '()]
+      [{'() thing} (list thing)]
+
+      ; invalid ellipsis
+      [{(cons (stx: ...) tl) #f}
+       (raise-syntax-error #f "nothing preceding ellipsis" (car stxs))]
+      [{(cons (stx: ...) tl) (e stx)}
+       (raise-syntax-error #f "may not be followed by two ellipsis" stx)]
+
+      ; valid ellipsis
+      [{(cons (stx: ...) tl) stx}
+       (loop tl (e stx))]
+
+      ; element
+      [{(cons hd tl) #f}
+       (loop tl hd)]
+      [{(cons hd tl) pre}
+       (cons pre (loop tl hd))])))
+
 (define (plural n)
   (if (= n 1) "" "s"))
 
 (module+ test
   (require
    rackunit
-   "../util/example-language-decls.rkt"
-   "../util/syntax.rkt")
+   "../util/example-language-decls.rkt")
+
+  ;; ------------
+  ;; test 'parse-list+ellipsis'
+  ;; ------------
+
+  (define/syntax-parse ooo (quote-syntax ...))
+
+  (check-match (parse-list+ellipsis (syntax->list #'[x y ooo z]))
+               (list (stx: x)
+                     (e (stx: y))
+                     (stx: z)))
+
+  (check-match (parse-list+ellipsis (syntax->list #'[y ooo z ooo]))
+               (list (e (stx: y))
+                     (e (stx: z))))
+
+  (check-exn #px"...: nothing preceding ellipsis"
+             (λ () (parse-list+ellipsis (list #'ooo #'x))))
+  (check-exn #px"x: may not be followed by two ellipsis"
+             (λ () (parse-list+ellipsis (list #'y #'x #'ooo #'ooo #'z))))
+  (check-exn #px"unquote: may not be followed by two ellipsis"
+             (λ () (parse-list+ellipsis (list #'y #',x #'ooo #'ooo #'z))))
 
   ;; ------------
   ;; test 'parse-mt/X'
