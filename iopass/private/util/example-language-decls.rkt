@@ -14,7 +14,7 @@
 (define tm-i  (terminal-spec #'[i ::=] '(i) #'exact-integer? #'=))
 
 ;; (define-language L
-;;   [a b ::= (A a) (B x c ...)]
+;;   [a b ::= (A . a) (B x c ...)]
 ;;   [c   ::= (C)])
 
 (define fm-x-c (form-list #'(x y)
