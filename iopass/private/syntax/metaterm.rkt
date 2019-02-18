@@ -111,6 +111,36 @@
    "../util/example-language-decls.rkt"
    "../util/syntax.rkt")
 
+  ;; ------------
+  ;; test 'parse-mt/X'
+  ;; ------------
+
+  (define fm-i^ (form-list #'[i]
+                           (list (metavar #'i 'i))
+                           #f
+                           '()))
+  (define fm-x-y (form-list #'[x y]
+                            (list (metavar #'x 'x) (metavar #'y 'y))
+                            #f
+                            '()))
+  (define fm-x-y^ (form-list #'[x y]
+                             (list (metavar #'x 'x))
+                             #f
+                             (list (metavar #'y 'y))))
+
+  (check-exn #px"list datum not allowed"
+             (λ () (parse-mt/terminal tm-i #'(1 2))))
+  (check-exn #px"list datum not allowed"
+             (λ () (parse-mt/terminal tm-i #'())))
+  (check-exn #px"expected 2 arguments, got 1"
+             (λ () (parse-mt/form fm-x-y L #'[foo])))
+  (check-exn #px"expected 2 arguments, got 1"
+             (λ () (parse-mt/form fm-x-y^ L #'[foo])))
+  (check-exn #px"expected 1 argument, got 2"
+             (λ () (parse-mt/form fm-i^ L #'[8 8])))
+  (check-exn #px"expected at least 1 argument, got 0"
+             (λ () (parse-mt/form fm-x-c L #'())))
+
   (check-match
    (parse-mt/nonterminal nt-ab L #'(A . ,(mk-a)))
    (mt:prod (== pr-A)

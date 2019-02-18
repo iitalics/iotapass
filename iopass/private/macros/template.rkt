@@ -73,7 +73,6 @@
 (module+ test
   (require
    rackunit
-   syntax/macro-testing
    "define.rkt")
 
   (define-terminals T
@@ -131,12 +130,6 @@
   ; datum
   (check-eqv? (template (L i) 5)  5)
   (check-eq? (template (L x) foo) 'foo)
-  (check-exn #px"list datum not allowed"
-             (λ () (convert-compile-time-error
-                    (template (L i) (1 2)))))
-  (check-exn #px"list datum not allowed"
-             (λ () (convert-compile-time-error
-                    (template (L i) ()))))
   (check-exn #px"template: contract violation\n  expected: symbol\\?"
              (λ () (template (L x) "not a symbol")))
 
@@ -152,14 +145,4 @@
   (check-equal? (template (L e) (op "nop"))
                 (raw-prod (L e) (op "nop" (vector))))
   (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
-                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+)))
-  ; - arity errors
-  (check-exn #px"expected 2 arguments, got 1"
-             (λ () (convert-compile-time-error
-                    (template (L d) (def twelve)))))
-  (check-exn #px"expected 1 argument, got 2"
-             (λ () (convert-compile-time-error
-                    (template (L e) (print (num . 1) (num . 2))))))
-  (check-exn #px"expected at least 1 argument, got 0"
-             (λ () (convert-compile-time-error
-                    (template (L e) (op))))))
+                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+))))
