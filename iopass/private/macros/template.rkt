@@ -72,8 +72,9 @@
 
 (module+ test
   (require
+   "define.rkt"
    rackunit
-   "define.rkt")
+   racket/port)
 
   (define-terminals T
     [i j ::= integer? #:compare =]
@@ -134,15 +135,28 @@
              (λ () (template (L x) "not a symbol")))
 
   ; productions
-  ; - basic forms
   (check-equal? (template (L e) (num . 5)) e-5)
-  ; - form-list (no arguments)
+
+  ; form-list: no arguments
   (check-equal? (template (L e) (pi)) e-pi)
-  ; - form-list (constant arguments)
+  ; form-list: constant arguments
   (check-equal? (template (L d) (def twelve ,e-+)) d-twelve)
-  ; - form-list (variadic arguments; no ellipsis in template)
+
+  ; form-list: variadic arguments w/ no ellipsis
   (check-equal? (template (L e) (op "+" (num . 5) ,e-7)) e-+)
   (check-equal? (template (L e) (op "nop"))
                 (raw-prod (L e) (op "nop" (vector))))
   (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
-                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+))))
+                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+)))
+
+  ; form-list: order of evaluation
+  (check-equal? (with-output-to-string
+                  (λ ()
+                    (define (trace x [msg x]) (printf "[~s]" msg) x)
+                    (template (L e)
+                              (let ([,(trace 'x)
+                                     ,(trace e-5 'e-5)]
+                                    [,(trace 'y)
+                                     ,(trace e-7 'e-7)])
+                                ,(trace e-+ 'e-+)))))
+                "[x][e-5][y][e-7][e-+]"))

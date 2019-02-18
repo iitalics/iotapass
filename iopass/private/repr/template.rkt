@@ -6,53 +6,105 @@
  (prefix-in mt: "../ast/metaterm.rkt")
  "../ast/decl.rkt"
  "../repr/ids.rkt"
+ (for-template racket/base)
+ (only-in racket/syntax generate-temporary)
  racket/list
  racket/match
  syntax/parse)
 
 ;; =======================================================================================
 
-;; Compile a metaterm into an expression producing a language term; for use
-;; in (template ..) or related macros.
+;; ----------
+;; compile-template
+;; ----------
 
 ;; syntax syntax language-repr-ids metaterm -> [listof syntax]
+; Compile a metaterm into an expression producing a language term; for use
+; in (template ..) or related macros.
 (define (compile-template src-stx macro-head repr-ids init-mt)
-  (define pr=>ids (language-repr-ids-productions repr-ids))
+
+  ;; metaterm -> [listof binding] [listof syntax]
+  ; Perform "ANF" conversion. The list of bindings may contain side effects, while the
+  ; list of syntax will be the pure result values.
+  (define (mt->bindings+exprs mt)
+    (match mt
+      ; base cases: unquoted or datum
+      [(or (mt:unquoted stx spec)
+           (mt:datum stx spec))
+       (define id (generate-temporary stx))
+       (define expr (make-spec-protect repr-ids
+                                       src-stx
+                                       macro-head
+                                       spec
+                                       (if (mt:datum? mt)
+                                         (quasisyntax/loc src-stx (quote #,stx))
+                                         stx)))
+       (values (list (binding id expr))
+               (list id))]
+
+      ; compound: production
+      [(mt:prod pr body)
+       (define/syntax-parse [ctor _ _]
+         (hash-ref (language-repr-ids-productions repr-ids) pr))
+       (define-values [bindings args]
+         (mt->bindings+exprs body))
+       (values bindings
+               (list (quasisyntax/loc src-stx
+                       (ctor #,@args))))]
+
+      ; compound: multiple results
+      [(mt:multiple mts)
+       (let mts->bindings+exprs ([mts mts])
+         (if (null? mts)
+           (values '() '())
+           (let-values ([(bs1 es1) (mt->bindings+exprs (car mts))]
+                        [(bs2 es2) (mts->bindings+exprs (cdr mts))])
+             (values (append bs1 bs2)
+                     (append es1 es2)))))]
+
+      ; compound: combine results
+      [(mt:build n-cols rows)
+       (define-values [bindings exprss]
+         (let mts->bindings+exprss ([rows rows])
+           (if (null? rows)
+             (values '() (make-list n-cols '()))
+             (let-values ([(bs1 es) (mt->bindings+exprs (car rows))]
+                          [(bs2 ess) (mts->bindings+exprss (cdr rows))])
+               (values (append bs1 bs2)
+                       (map cons es ess))))))
+       (define vector-exprs
+         (for/list ([exprs (in-list exprss)])
+           (quasisyntax/loc src-stx
+             (vector-immutable #,@exprs))))
+       (values bindings vector-exprs)]))
+
+  ;; -----
 
   (when (or (mt:multiple? init-mt)
             (mt:build? init-mt))
     (error 'compile-template
            (format "metaterm may have multiple results: ~s" init-mt)))
 
-  (car
-   ;; metaterm -> [listof syntax]
-   (let compile-mt ([mt init-mt])
-     (match mt
-       ; atomic
-       [(mt:unquoted stx s)
-        (list (make-spec-protect repr-ids src-stx macro-head s stx))]
-       [(mt:datum stx s)
-        (list (make-spec-protect repr-ids src-stx macro-head s #`'#,stx))]
+  (let-values ([(bindings exprs) (mt->bindings+exprs init-mt)])
+    (make-let* bindings
+               (car exprs))))
 
-       ; compound: production
-       [(mt:prod pr body)
-        (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
-        (define/syntax-parse [arg ...] (compile-mt body))
-        (list (quasisyntax/loc src-stx
-                (ctor arg ...)))]
+;; ----------
+;; helpers for 'compile-template'
+;; ----------
 
-       ; compound: multiple results
-       [(mt:multiple mts)
-        (append-map compile-mt mts)]
+;; (binding identifier syntax)
+(struct binding [name rhs] #:transparent)
 
-       ; compound: combine results
-       [(mt:build n-cols row-mts)
-        (define/syntax-parse [(val ...) ...]
-          (map/transposed n-cols compile-mt row-mts))
-        (syntax->list
-         (quasisyntax/loc src-stx
-           {(vector-immutable val ...)
-            ...}))]))))
+;; binding -> syntax
+(define (binding->syntax b)
+  #`[#,(binding-name b)
+     #,(binding-rhs b)])
+
+;; [listof binding] syntax -> let*-syntax
+(define (make-let* bindings body)
+  #`(let* (#,@(map binding->syntax bindings))
+      #,body))
 
 ;; ----------------
 ;; helpers for protecting expressions with contracts
@@ -97,27 +149,3 @@
      (format "nonterminal '~a'" (spec-description nt))]
     [(? terminal-spec? tm)
      (symbol->string (syntax-e (terminal-spec-contract-id tm)))]))
-
-;; ----------------
-;; utils
-;; ----------------
-
-;; (n : nat) [X -> (list Y ...n)] [listof X] -> (list [listof Y] ...n)
-(define (map/transposed n f l)
-  (if (null? l)
-    (make-list n '())
-    (map cons
-         (f (car l))
-         (map/transposed n f (cdr l)))))
-
-(module+ test
-  (require
-   rackunit)
-
-  (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
-                '())
-  (check-equal? (map/transposed 2 (λ (i) (list i i)) '())
-                '[() ()])
-  (check-equal? (map/transposed 2 (λ (i) (list i (* i i))) (range 4))
-                (list (list 0 1 2 3)
-                      (list 0 1 4 9))))
