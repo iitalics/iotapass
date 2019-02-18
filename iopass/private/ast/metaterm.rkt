@@ -14,9 +14,9 @@
 ;; metaterm ::=
 ;;   (unquoted syntax spec)            unquoted expression        (",e")
 ;;   (datum syntax terminal-spec)      implicitly-quoted datum    ("5")
-;;   (multiple [listof metaterm])      multiple values            ("[x y]", "[(x y) (z w)]")
+;;   (multiple [listof metaterm])      multiple values            ("[x ,e]")
 ;;   (prod production metaterm)        production                 ("(+ 0 ,e)")
-;;   (build nat [listof metaterm])     sequence of terms          ("(,x ,y ,z)")
+;;   (build nat metaterm-seq)          sequence of terms          ("(,x ,y)", "(,x ,x* ...)")
 (struct unquoted [stx spec] #:transparent)
 (struct datum [stx spec] #:transparent)
 (struct multiple [mts] #:transparent)
@@ -33,3 +33,7 @@
 ;; [x ...]     [hi world]    (build 1 (list (datum #'hi <x>) (datum #'world <x>)))
 ;; [(x i) ...] [(A 0) (B 1)] (build 2 (list (multiple (datum #'A <x>) (datum #'0 <i>))
 ;;                                          (multiple (datum #'B <x>) (datum #'1 <i>))))
+
+;; metaterm-seq ::=
+;;   [listof (or metaterm (e metaterm))]
+(struct e [wrapped] #:transparent)
