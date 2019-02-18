@@ -76,9 +76,12 @@
      #:fail-when #t "expected a parenthesized list"
      (void)]
 
-    [(e ...)
+    [(raw ...)
+     ; parse ellipsis following terms
+     #:do [(define terms (parse-list+ellipsis (@ raw)))]
+
      ; check arity
-     #:do [(define n-args (length (@ e)))
+     #:do [(define n-args (length terms))
            (define n-min (+ (length before)
                             (length after)))]
      #:fail-unless (or repeat (= n-args n-min))
@@ -88,9 +91,16 @@
      (format "expected at least ~a argument~a, got ~a"
              n-min (plural n-min) n-args)
 
+     ; TODO: implement them
+     #:do [(for ([term (in-list terms)])
+             (when (e? term)
+               (raise-syntax-error #f
+                 "ellipsis metaterms unimplemented"
+                 (e-syntax term))))]
+
      #:do [; split syntax into before/middle/after
            (define-values [before-stxs next-stxs]
-             (split-at (@ e) (length before)))
+             (split-at terms (length before)))
            (define-values [middle-stxs after-stxs]
              (split-at next-stxs (- n-args n-min)))
 
@@ -188,6 +198,11 @@
                              (list (metavar #'x 'x))
                              #f
                              (list (metavar #'y 'y))))
+  (define fm-x-x-y* (form-list #'[x x y ooo]
+                               (list (metavar #'x 'x)
+                                     (metavar #'x 'x))
+                               (ellipsis (metavar #'y 'y))
+                               '()))
 
   (check-exn #px"foo: expected a parenthesized list"
              (λ () (parse-mt/form fm-x-c L #'foo)))
@@ -205,6 +220,8 @@
              (λ () (parse-mt/form fm-i^ L #'[8 8])))
   (check-exn #px"expected at least 1 argument, got 0"
              (λ () (parse-mt/form fm-x-c L #'())))
+  (check-exn #px"expected at least 2 arguments, got 1"
+             (λ () (parse-mt/form fm-x-x-y* L #'[,foo ooo])))
 
   (check-match
    (parse-mt/nonterminal nt-ab L #'(A . ,(mk-a)))
