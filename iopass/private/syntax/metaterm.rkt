@@ -76,7 +76,7 @@
      (form-field-count rep-fm)
      (for/list ([t (in-list terms)])
        (match t
-         [(e stx) (raise-syntax-error #f "UNIMPLEMENTED: ellipsis" stx)]
+         [(e stx) (mt:e (parse/form rep-fm stx))]
          [stx (parse/form rep-fm stx)]))))
 
   (syntax-parse stx
@@ -240,9 +240,24 @@
   (check-match
    (parse-mt/form fm-x-c L #'[foo (C) ,c2 ,c3])
    (mt:multiple
-    (list (mt:datum (free-id= foo)
-                    (== tm-xy))
+    (list (mt:datum (free-id= foo) (== tm-xy))
           (mt:build 1
-                    (list (mt:prod (== pr-C eq?) (mt:multiple '()))
+                    (list (mt:prod (== pr-C) (mt:multiple '()))
                           (mt:unquoted (stx: c2) (== nt-c))
-                          (mt:unquoted (stx: c3) (== nt-c))))))))
+                          (mt:unquoted (stx: c3) (== nt-c)))))))
+
+  (check-match
+   (parse-mt/form fm-x-c L #'[,x ,cs ooo])
+   (mt:multiple
+    (list (mt:unquoted (stx: x) _)
+          (mt:build 1
+                    (list (mt:e (mt:unquoted (stx: cs) _)))))))
+
+  (check-match
+   (parse-mt/form fm-x-c L #'[,x ,cs ooo ,d ,es ooo])
+   (mt:multiple
+    (list (mt:unquoted (stx: x) _)
+          (mt:build 1
+                    (list (mt:e (mt:unquoted (stx: cs) _))
+                          (mt:unquoted (stx: d) _)
+                          (mt:e (mt:unquoted (stx: es) _))))))))
