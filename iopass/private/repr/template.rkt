@@ -6,53 +6,99 @@
  (prefix-in mt: "../ast/metaterm.rkt")
  "../ast/decl.rkt"
  "../repr/ids.rkt"
+ (for-template racket/base)
+ (only-in racket/syntax generate-temporary)
  racket/list
  racket/match
  syntax/parse)
 
 ;; =======================================================================================
 
-;; Compile a metaterm into an expression producing a language term; for use
-;; in (template ..) or related macros.
+;; ----------
+;; compile-template
+;; ----------
 
 ;; syntax syntax language-repr-ids metaterm -> [listof syntax]
+; Compile a metaterm into an expression producing a language term; for use
+; in (template ..) or related macros.
 (define (compile-template src-stx macro-head repr-ids init-mt)
-  (define pr=>ids (language-repr-ids-productions repr-ids))
+
+  ;; metaterm -> [listof binding] [listof syntax]
+  ; Perform "ANF" conversion. The list of bindings may contain side effects, while the
+  ; list of syntax will be the pure result values.
+  (define (mt->bindings+exprs mt)
+    (match mt
+      ; base cases: unquoted or datum
+      [(or (mt:unquoted stx spec)
+           (mt:datum stx spec))
+       (define id (generate-temporary stx))
+       (define expr (make-spec-protect repr-ids
+                                       src-stx
+                                       macro-head
+                                       spec
+                                       (if (mt:datum? mt)
+                                         (quasisyntax/loc src-stx (quote #,stx))
+                                         stx)))
+       (values (list (b id expr))
+               (list id))]
+
+      ; compound: production
+      [(mt:prod pr body)
+       (define/syntax-parse [ctor _ _]
+         (hash-ref (language-repr-ids-productions repr-ids) pr))
+       (define-values [bindings args]
+         (mt->bindings+exprs body))
+       (values bindings
+               (list (quasisyntax/loc src-stx
+                       (ctor #,@args))))]
+
+      ; compound: multiple results
+      [(mt:multiple mts)
+       (let mts->bindings+exprs ([mts mts])
+         (if (null? mts)
+           (values '() '())
+           (let-values ([(bs1 es1) (mt->bindings+exprs (car mts))]
+                        [(bs2 es2) (mts->bindings+exprs (cdr mts))])
+             (values (append bs1 bs2)
+                     (append es1 es2)))))]
+
+      ; compound: combine results
+      [(mt:build n-cols row-mts)
+       (error 'compile-template "build UNIMPLEMENTED")
+       #;
+       (define/syntax-parse [(val ...) ...]
+         (map/transposed n-cols compile-mt row-mts))
+       #;
+       (syntax->list
+        (quasisyntax/loc src-stx
+          {(vector-immutable val ...)
+           ...}))]))
+
+  ;; -----
 
   (when (or (mt:multiple? init-mt)
             (mt:build? init-mt))
     (error 'compile-template
            (format "metaterm may have multiple results: ~s" init-mt)))
 
-  (car
-   ;; metaterm -> [listof syntax]
-   (let compile-mt ([mt init-mt])
-     (match mt
-       ; atomic
-       [(mt:unquoted stx s)
-        (list (make-spec-protect repr-ids src-stx macro-head s stx))]
-       [(mt:datum stx s)
-        (list (make-spec-protect repr-ids src-stx macro-head s #`'#,stx))]
+  (let-values ([(bindings exprs) (mt->bindings+exprs init-mt)])
+    (make-let* bindings
+               (car exprs))))
 
-       ; compound: production
-       [(mt:prod pr body)
-        (define/syntax-parse [ctor _ _] (hash-ref pr=>ids pr))
-        (define/syntax-parse [arg ...] (compile-mt body))
-        (list (quasisyntax/loc src-stx
-                (ctor arg ...)))]
+;; ----------
+;; helpers for 'compile-template'
+;; ----------
 
-       ; compound: multiple results
-       [(mt:multiple mts)
-        (append-map compile-mt mts)]
+;; binding ::= (b identifier syntax)
+(struct b [name rhs] #:transparent)
 
-       ; compound: combine results
-       [(mt:build n-cols row-mts)
-        (define/syntax-parse [(val ...) ...]
-          (map/transposed n-cols compile-mt row-mts))
-        (syntax->list
-         (quasisyntax/loc src-stx
-           {(vector-immutable val ...)
-            ...}))]))))
+(define (binding->syntax binding)
+  #`[#,(b-name binding)
+     #,(b-rhs binding)])
+
+(define (make-let* bindings body)
+  #`(let* (#,@(map binding->syntax bindings))
+      #,body))
 
 ;; ----------------
 ;; helpers for protecting expressions with contracts
