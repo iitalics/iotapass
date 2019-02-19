@@ -39,7 +39,7 @@
                                        (if (mt:datum? mt)
                                          (quasisyntax/loc src-stx (quote #,stx))
                                          stx)))
-       (values (list (b id expr))
+       (values (list (binding id expr))
                (list id))]
 
       ; compound: production
@@ -63,16 +63,20 @@
                      (append es1 es2)))))]
 
       ; compound: combine results
-      [(mt:build n-cols row-mts)
-       (error 'compile-template "build UNIMPLEMENTED")
-       #;
-       (define/syntax-parse [(val ...) ...]
-         (map/transposed n-cols compile-mt row-mts))
-       #;
-       (syntax->list
-        (quasisyntax/loc src-stx
-          {(vector-immutable val ...)
-           ...}))]))
+      [(mt:build n-cols rows)
+       (define-values [bindings exprss]
+         (let mts->bindings+exprss ([rows rows])
+           (if (null? rows)
+             (values '() (make-list n-cols '()))
+             (let-values ([(bs1 es) (mt->bindings+exprs (car rows))]
+                          [(bs2 ess) (mts->bindings+exprss (cdr rows))])
+               (values (append bs1 bs2)
+                       (map cons es ess))))))
+       (define vector-exprs
+         (for/list ([exprs (in-list exprss)])
+           (quasisyntax/loc src-stx
+             (vector-immutable #,@exprs))))
+       (values bindings vector-exprs)]))
 
   ;; -----
 
@@ -89,13 +93,15 @@
 ;; helpers for 'compile-template'
 ;; ----------
 
-;; binding ::= (b identifier syntax)
-(struct b [name rhs] #:transparent)
+;; (binding identifier syntax)
+(struct binding [name rhs] #:transparent)
 
-(define (binding->syntax binding)
-  #`[#,(b-name binding)
-     #,(b-rhs binding)])
+;; binding -> syntax
+(define (binding->syntax b)
+  #`[#,(binding-name b)
+     #,(binding-rhs b)])
 
+;; [listof binding] syntax -> let*-syntax
 (define (make-let* bindings body)
   #`(let* (#,@(map binding->syntax bindings))
       #,body))
@@ -143,27 +149,3 @@
      (format "nonterminal '~a'" (spec-description nt))]
     [(? terminal-spec? tm)
      (symbol->string (syntax-e (terminal-spec-contract-id tm)))]))
-
-;; ----------------
-;; utils
-;; ----------------
-
-;; (n : nat) [X -> (list Y ...n)] [listof X] -> (list [listof Y] ...n)
-(define (map/transposed n f l)
-  (if (null? l)
-    (make-list n '())
-    (map cons
-         (f (car l))
-         (map/transposed n f (cdr l)))))
-
-(module+ test
-  (require
-   rackunit)
-
-  (check-equal? (map/transposed 0 (λ (i) '()) (range 4))
-                '())
-  (check-equal? (map/transposed 2 (λ (i) (list i i)) '())
-                '[() ()])
-  (check-equal? (map/transposed 2 (λ (i) (list i (* i i))) (range 4))
-                (list (list 0 1 2 3)
-                      (list 0 1 4 9))))
