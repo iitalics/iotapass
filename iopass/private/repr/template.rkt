@@ -19,64 +19,71 @@
 ;; -------------
 
 ;; ir ::=
-;;   | (ir:let [listof ir:binding] ir:imm)
+;;   | (ir:top-level [listof ir:clause] ir:imm)
 ;;
-;; ir:binding ::=
-;;   | (ir:binding:protect id stx spec)
+;; ir:clause ::=
+;;   | (ir:clause:bind id stx)
+;;   | (ir:clause:check stx spec)
 ;;
 ;; ir:imm ::=
 ;;   | (ir:imm:mk production [listof ir:imm])
 ;;   | (ir:imm:vec [listof ir:imm])
-;;   | id
+;;   | identifier
+;;   | #'(quote <any>)
 
-(struct ir:let (bindings body) #:transparent)
-(struct ir:binding:protect (id stx spec) #:transparent)
+(struct ir:clause:bind (id stx) #:transparent)
+(struct ir:top-level (clauses body) #:transparent)
+(struct ir:clause:check (stx spec) #:transparent)
 (struct ir:imm:mk (prod args) #:transparent)
 (struct ir:imm:vec (elems) #:transparent)
 
 ;; metaterm -> ir
 (define (metaterm->ir init-mt [fresh generate-temporary])
 
-  ;; metaterm -> [listof ir:binding] [listof ir:imm]
+  ;; metaterm -> [listof ir:clause] [listof ir:imm]
   (define (anf mt)
     (match mt
-      [(or (mt:unquoted stx spec)
-           (mt:datum stx spec))
+      [(mt:unquoted stx spec)
        (define id (fresh))
-       (define the-stx (if (mt:datum? mt) #`(quote #,stx) stx))
-       (values (list (ir:binding:protect id the-stx spec))
+       (values (list (ir:clause:bind id stx)
+                     (ir:clause:check id spec))
                (list id))]
 
+      [(mt:datum stx spec)
+       (define stx+q #`(quote #,stx))
+       (values (list (ir:clause:check stx+q spec))
+               (list stx+q))]
+
       [(mt:prod prod body-mt)
-       (define-values [bs is] (anf body-mt))
-       (values bs (list (ir:imm:mk prod is)))]
+       (define-values [cs is] (anf body-mt))
+       (values cs (list (ir:imm:mk prod is)))]
 
       [(mt:multiple mts)
-       ;; -> [listof ir:binding] [listof ir:imm]
+       ;; -> [listof ir:clause] [listof ir:imm]
        (let loop ([mts mts])
          (if (null? mts)
            (values '() '())
-           (let-values ([(bs1 is1) (anf (car mts))]
-                        [(bs2 is2) (loop (cdr mts))])
-             (values (append bs1 bs2)
+           (let-values ([(cs1 is1) (anf (car mts))]
+                        [(cs2 is2) (loop (cdr mts))])
+             (values (append cs1 cs2)
                      (append is1 is2)))))]
 
       [(mt:build n-cols rows)
-       ;; -> [listof ir:binding] [listof [listof ir:imm]]
-       (define-values [bs iss]
+       (define-values [cs iss]
+         ;; -> [listof ir:clause] [listof [listof ir:imm]]
          (let loop ([rows rows])
            (if (null? rows)
              (values '() (make-list n-cols '()))
-             (let-values ([(bs1 is) (anf (car rows))]
-                          [(bs2 iss) (loop (cdr rows))])
-               (values (append bs1 bs2)
+             (let-values ([(cs1 is) (anf (car rows))]
+                          [(cs2 iss) (loop (cdr rows))])
+               (values (append cs1 cs2)
                        (map cons is iss))))))
-       (values bs (map ir:imm:vec iss))]))
+       (values cs (map ir:imm:vec iss))]))
 
   ;; ----
 
-  (define-values [bs is] (anf init-mt))
-  (ir:let bs (car is)))
+  (define-values [cs is] (anf init-mt))
+  (ir:top-level cs (car is)))
 
 ;; -------------
 ;; compile-template
@@ -86,25 +93,25 @@
 ; Compile a metaterm into an expression producing a language term; for use
 ; in (template ..) or related macros.
 (define (compile-template src-stx macro-head repr-ids mt)
-
-  ;; ir:binding -> syntax
-  (define (ir:binding->let-values-clause b)
-    (match b
-      [(ir:binding:protect id rhs-stx spec)
-       (quasisyntax/loc src-stx
-         [(#,id)
-          (protect-value '#,macro-head
-                         #,(spec-predicate spec repr-ids)
-                         '#,(spec-expectation-string spec)
-                         #,rhs-stx)])]))
-
   (let ir->stx ([ir (metaterm->ir mt)])
     (match ir
-      [(? syntax? stx) stx]
-      [(ir:let bindings body)
+      ; top-level
+      [(ir:top-level clauses body)
        (quasisyntax/loc src-stx
-         (let*-values (#,@(map ir:binding->let-values-clause bindings))
+         (let ()
+           #,@(map ir->stx clauses)
            #,(ir->stx body)))]
+      ; clauses
+      [(ir:clause:bind id rhs-stx)
+       (quasisyntax/loc src-stx
+         (define-values [#,id] #,rhs-stx))]
+      [(ir:clause:check stx spec)
+       (quasisyntax/loc src-stx
+         (unless (#,(spec-predicate spec repr-ids) #,stx)
+           (raise-argument-error '#,macro-head
+                                 '#,(spec-expectation-string spec)
+                                 #,stx)))]
+      ; immediates
       [(ir:imm:mk pr args)
        (define ctor-id (car (hash-ref (language-repr-ids-productions repr-ids) pr)))
        (quasisyntax/loc src-stx
@@ -112,24 +119,12 @@
           #,@(map ir->stx args)))]
       [(ir:imm:vec elems)
        (quasisyntax/loc src-stx
-         (vector-immutable #,@(map ir->stx elems)))])))
+         (vector-immutable #,@(map ir->stx elems)))]
+      [(? syntax? stx) stx])))
 
 ;; ----------------
-;; helpers for protecting expressions with contracts
+;; helpers for contract checks
 ;; ----------------
-
-(module protect-value-function racket/base
-  (provide protect-value)
-  ;; symbol [any -> bool | X] string any -> X
-  (define (protect-value macro-head
-                         predicate
-                         expect-string
-                         value)
-    (if (predicate value)
-      value
-      (raise-argument-error macro-head expect-string value))))
-
-(require (for-template 'protect-value-function))
 
 ;; spec language-repr-ids -> identifier
 (define (spec-predicate spec repr-ids)
@@ -161,16 +156,21 @@
     (define i 0)
     (λ () (set! i (add1 i)) (format-id #'_ "tmp~a" i)))
 
-  (define-syntax-rule (check-metaterm->ir spec mt-stx pattern)
-    (check-match (metaterm->ir (parse-mt spec L mt-stx) (temps)) pattern))
-
   ; Pattern abbreviations
-  (define-match-expander ir:let*
-    (syntax-rules () [(_ bind ... bdy) (ir:let (list bind ...) bdyx)]))
   (define-match-expander ir:imm:mk*
-    (syntax-rules () [(_ pr arg ...) (ir:imm:mk (== pr) (list arg ...))]))
+    (syntax-rules ()
+      [(_ pr arg ...) (ir:imm:mk (== pr) (list arg ...))]))
   (define-match-expander ir:imm:vec*
-    (syntax-rules () [(_ elem ...) (ir:imm:vec (list elem ...))]))
+    (syntax-rules ()
+      [(_ elem ...) (ir:imm:vec (list elem ...))]))
+
+  (define-syntax-rule (check-metaterm->ir spec mt-stx
+                                          bind-patterns ...
+                                          imm-pattern)
+    (check-match (metaterm->ir (parse-mt spec L mt-stx)
+                               (temps))
+                 (ir:top-level (list bind-patterns ...)
+                               imm-pattern)))
 
   ; Ad-hoc new nonterminal:
   ; [pt ::= (Point i i)]
@@ -181,34 +181,29 @@
   ;; ----------------
 
   ;; test unquote, datum
-  (check-metaterm->ir tm-i
-                      #'45
-                      (ir:let* (ir:binding:protect (stx: tmp1) (stx: '45) (== tm-i))
-                               (stx: tmp1)))
-  (check-metaterm->ir tm-xy
-                      #',(some-expr)
-                      (ir:let* (ir:binding:protect (stx: tmp1) (stx: (some-expr)) (== tm-xy))
-                               (stx: tmp1)))
+  (check-metaterm->ir tm-i #'45
+                      (ir:clause:check (stx: '45) (== tm-i))
+                      (stx: '45))
+  (check-metaterm->ir tm-xy #',(some-expr)
+                      (ir:clause:bind (stx: tmp1) (stx: (some-expr)))
+                      (ir:clause:check (stx: tmp1) (== tm-xy))
+                      (stx: tmp1))
 
   ;; test productions
   (check-metaterm->ir nt-c #'(C)
-                      (ir:let* (ir:imm:mk* pr-C)))
+                      (ir:imm:mk* pr-C))
 
   (check-metaterm->ir nt-pt #'(Point 3 4)
-                      (ir:let* (ir:binding:protect (stx: tmp1) (stx: '3) (== tm-i))
-                               (ir:binding:protect (stx: tmp2) (stx: '4) (== tm-i))
-                               (ir:imm:mk* pr-Pt (stx: tmp1) (stx: tmp2))))
+                      (ir:clause:check (stx: '3) (== tm-i))
+                      (ir:clause:check (stx: '4) (== tm-i))
+                      (ir:imm:mk* pr-Pt (stx: '3) (stx: '4)))
 
   ;; test build
-  (check-metaterm->ir nt-ab
-                      #'(B sym (C) ,some-c)
-                      (ir:let* (ir:binding:protect (stx: tmp1)
-                                                   (stx: 'sym)
-                                                   (== tm-xy))
-                               (ir:binding:protect (stx: tmp2)
-                                                   (stx: some-c)
-                                                   (== nt-c))
-                               (ir:imm:mk* pr-B
-                                           (stx: tmp1)
-                                           (ir:imm:vec* (ir:imm:mk* pr-C)
-                                                        (stx: tmp2))))))
+  (check-metaterm->ir nt-ab #'(B sym (C) ,some-c)
+                      (ir:clause:check (stx: 'sym) (== tm-xy))
+                      (ir:clause:bind (stx: tmp1) (stx: some-c))
+                      (ir:clause:check (stx: tmp1) (== nt-c))
+                      (ir:imm:mk* pr-B
+                                  (stx: 'sym)
+                                  (ir:imm:vec* (ir:imm:mk* pr-C)
+                                               (stx: tmp1)))))
