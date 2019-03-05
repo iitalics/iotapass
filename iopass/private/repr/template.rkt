@@ -238,8 +238,10 @@
   (define (listof/depth n f x)
     (if (zero? n)
       (f x)
-      (and (list? x)
-           (andmap (λ (y) (listof/depth (sub1 n) f y)) x)))))
+      (or (null? x)
+          (and (pair? x)
+               (listof/depth (sub1 n) f (car x))
+               (listof/depth n        f (cdr x)))))))
 
 (require (for-template 'listof/depth))
 
@@ -270,7 +272,20 @@
    threading
    "../util/syntax.rkt"
    "../util/example-language-decls.rkt"
-   "../syntax/metaterm.rkt")
+   "../syntax/metaterm.rkt"
+   (submod ".." listof/depth))
+
+  ;; listof/depth tests
+  (check-true (listof/depth 0 integer? 5))
+  (check-false (listof/depth 0 integer? 'x))
+  (check-false (listof/depth 0 integer? '(1 0)))
+  (check-false (listof/depth 1 integer? 5))
+  (check-true (listof/depth 1 integer? '(1 0)))
+  (check-false (listof/depth 2 integer? '(1 0)))
+  (check-true (listof/depth 2 integer? '((1 0) () (2 3))))
+  (check-false (listof/depth 2 integer? '((1 0) 0 (2 3))))
+
+  ;; --------------
 
   ; Special gensym used for tests only
   (define (temps)
