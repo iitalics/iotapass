@@ -6,7 +6,7 @@
  (prefix-in mt: "../ast/metaterm.rkt")
  "../ast/decl.rkt"
  "../repr/ids.rkt"
- (for-template racket/base)
+ (for-template racket/base (only-in racket/vector vector-append))
  (only-in racket/syntax generate-temporary format-id)
  racket/list
  racket/match
@@ -28,6 +28,7 @@
 ;; ir:imm ::=
 ;;   | (ir:imm:mk production [listof ir:imm])
 ;;   | (ir:imm:vec [listof ir:imm])
+;;   | (ir:imm:append ir:imm ir:imm)
 ;;   | identifier
 ;;   | #'(quote <any>)
 
@@ -36,6 +37,15 @@
 (struct ir:clause:check (stx spec) #:transparent)
 (struct ir:imm:mk (prod args) #:transparent)
 (struct ir:imm:vec (elems) #:transparent)
+(struct ir:imm:append (front back) #:transparent)
+
+(define ir:imm:empty (ir:imm:vec '()))
+(define (ir:imm:cons hd tl)
+  (match tl
+    [(ir:imm:vec elems)
+     (ir:imm:vec (cons hd elems))]
+    [(ir:imm:append a b)
+     (ir:imm:append (ir:imm:cons hd a) b)]))
 
 ;; metaterm -> ir
 (define (metaterm->ir init-mt [fresh generate-temporary])
@@ -69,16 +79,14 @@
                      (append is1 is2)))))]
 
       [(mt:build n-cols rows)
-       (define-values [cs iss]
-         ;; -> [listof ir:clause] [listof [listof ir:imm]]
-         (let loop ([rows rows])
-           (if (null? rows)
-             (values '() (make-list n-cols '()))
-             (let-values ([(cs1 is) (anf (car rows))]
-                          [(cs2 iss) (loop (cdr rows))])
-               (values (append cs1 cs2)
-                       (map cons is iss))))))
-       (values cs (map ir:imm:vec iss))]))
+       ;; -> [listof ir:clause] [listof ir:imm]
+       (let loop ([rows rows])
+         (if (null? rows)
+           (values '() (make-list n-cols ir:imm:empty))
+           (let-values ([(cs1 is1) (anf (car rows))]
+                        [(cs2 is2) (loop (cdr rows))])
+             (values (append cs1 cs2)
+                     (map ir:imm:cons is1 is2)))))]))
 
   ;; ----
 
@@ -119,7 +127,11 @@
           #,@(map ir->stx args)))]
       [(ir:imm:vec elems)
        (quasisyntax/loc src-stx
-         (vector-immutable #,@(map ir->stx elems)))]
+         (vector #,@(map ir->stx elems)))]
+      [(ir:imm:append hd tl)
+       (quasisyntax/loc src-stx
+         (vector-append #,(ir->stx hd)
+                        #,(ir->stx tl)))]
       [(? syntax? stx) stx])))
 
 ;; ----------------
