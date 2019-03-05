@@ -103,50 +103,25 @@
   (define (push! kont)
     (set! outer-kont (compose outer-kont kont)))
 
-  ;; nat metaterm -> metaterm
-  ; Create bindings for expressions that may have side effects, and add any needed
-  ; contract checks.
-  (define (rebind+check initial-mt)
-    (define (trav depth mt)
-      (match mt
-        [(mt:unquoted stx spec)
-         (define id (fresh))
-         (push! (λ (r) (ir:bind id stx (ir:check id spec depth r))))
-         (mt:unquoted id spec)]
-        [(mt:datum stx spec)
-         (push! (curry ir:check  #`(quote #,stx) spec 0))
-         mt]
-        [(mt:prod prod body)
-         (mt:prod prod (trav depth body))]
-        [(mt:multiple cols)
-         (mt:multiple (map (curry trav depth) cols))]
-        [(mt:build n-cols rows)
-         (mt:build n-cols (map (curry trav/e depth) rows))]))
-    (define (trav/e depth mt-or-e)
-      (match mt-or-e
-        [(mt:e m) (mt:e (trav (add1 depth) m))]
-        [m (trav depth m)]))
-    (trav 0 initial-mt))
-
   ;; nat metaterm -> loop-ctx ir-kont [listof ir:expr]
-  ; Compile an intermediate metaterm at the given ellipsis depth. The term should not have
-  ; any side-effectful expressions ('rebind' should have been called first).
-  ; The resulting ctx must have depth equal to the given depth. In particular, this
-  ; implies that it is #f if depth is 0, and it is (ctx:for-loop ..) if depth is positive.
   (define (anf depth mt)
     (match mt
       [(mt:unquoted stx spec)
+       ; bind possibly-effectful syntax to temporary, and add contract check
+       (define tmp-id (fresh))
+       (push! (λ (r) (ir:bind tmp-id stx (ir:check tmp-id spec depth r))))
        ; create nested loop-ctx according to depth, something like:
        ; (for ([x0 stx]) (for ([x1 x0]) (for ([x2 x1]) ..)))
-       (for/fold ([cx #f] [stx stx] #:result (values cx id-kont (list stx)))
+       (for/fold ([cx #f] [stx tmp-id] #:result (values cx id-kont (list stx)))
                  ([_ (in-range depth)])
-         (define id (fresh))
-         (values (for-loop (list (ir:for-clause id stx))
+         (define id* (fresh))
+         (values (for-loop (list (ir:for-clause id* stx))
                            cx)
-                 id))]
+                 id*))]
 
       [(mt:datum stx spec)
        (define stx+q #`(quote #,stx))
+       (push! (curry ir:check stx+q spec 0))
        (values (empty-loops depth)
                id-kont
                (list stx+q))]
@@ -200,8 +175,7 @@
 
   ;;;;;;;;;;;;;;;;
 
-  (define safe-mt (rebind+check initial-mt))
-  (match-define-values [#f anf-kont (list expr)] (anf 0 safe-mt))
+  (match-define-values [#f anf-kont (list expr)] (anf 0 initial-mt))
   (outer-kont (anf-kont expr)))
 
 ;; -------------
@@ -393,12 +367,12 @@
   (check-match (IR nt-tbl (quote-syntax (Tbl [,x* ,i*] ...)))
                (<~ (ir:bind (stx: tmp1) (stx: x*))
                    (ir:check (stx: tmp1) (== tm-xy) 1)
-                   (ir:bind (stx: tmp2) (stx: i*))
-                   (ir:check (stx: tmp2) (== tm-i) 1)
-                   (ir:for (list (ir:for-clause (stx: tmp3) (stx: tmp1))
-                                 (ir:for-clause (stx: tmp4) (stx: tmp2)))
+                   (ir:bind (stx: tmp3) (stx: i*))
+                   (ir:check (stx: tmp3) (== tm-i) 1)
+                   (ir:for (list (ir:for-clause (stx: tmp2) (stx: tmp1))
+                                 (ir:for-clause (stx: tmp4) (stx: tmp3)))
                            ; loop expr:
-                           (ir:values (list (stx: tmp3) (stx: tmp4)))
+                           (ir:values (list (stx: tmp2) (stx: tmp4)))
                            ; out ids:
                            (list (stx: tmp5) (stx: tmp6)))
                    ; body:
@@ -428,10 +402,10 @@
   (check-match (IR nt-mat (quote-syntax (Mat [,i* ,i** ...] ...)))
                (<~ (ir:bind (stx: tmp1) (stx: i*))
                    (ir:check (stx: tmp1) (== tm-i) 1)
-                   (ir:bind (stx: tmp2) (stx: i**))
-                   (ir:check (stx: tmp2) (== tm-i) 2)
-                   (ir:for (list (ir:for-clause (stx: tmp3) (stx: tmp1))
-                                 (ir:for-clause (stx: tmp4) (stx: tmp2)))
+                   (ir:bind (stx: tmp3) (stx: i**))
+                   (ir:check (stx: tmp3) (== tm-i) 2)
+                   (ir:for (list (ir:for-clause (stx: tmp2) (stx: tmp1))
+                                 (ir:for-clause (stx: tmp4) (stx: tmp3)))
                            ; loop expr:
                            (ir:for (list (ir:for-clause (stx: tmp5) (stx: tmp4)))
                                    ; loop expr:
@@ -439,7 +413,7 @@
                                    ; out ids:
                                    (list (stx: tmp6))
                                    ; body:
-                                   (ir:cons (stx: tmp3)
+                                   (ir:cons (stx: tmp2)
                                             (stx: tmp6)))
                            ; out ids:
                            (list (stx: tmp7)))
