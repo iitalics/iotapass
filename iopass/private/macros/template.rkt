@@ -99,7 +99,7 @@
   (define e-pi (raw-prod (L e) (pi)))
   (define e-5 (raw-prod (L e) (num 5)))
   (define e-7 (raw-prod (L e) (num 7)))
-  (define e-+ (raw-prod (L e) (op "+" (vector e-5 e-7))))
+  (define e-+ (raw-prod (L e) (op "+" (list e-5 e-7))))
   (define d-twelve (raw-prod (L d) (def 'twelve e-+)))
 
   (check-true (raw-prod (L e) #:pred num e-5))
@@ -113,7 +113,7 @@
   (check-equal? (raw-prod (L e) #:proj [num 0] e-5) 5)
   (check-equal? (raw-prod (L e) #:proj [num 0] e-7) 7)
   (check-equal? (raw-prod (L e) #:proj [op 0] e-+) "+")
-  (check-equal? (raw-prod (L e) #:proj [op 1] e-+) (vector e-5 e-7))
+  (check-equal? (raw-prod (L e) #:proj [op 1] e-+) (list e-5 e-7))
   (check-eq? (raw-prod (L d) #:proj [def 1] d-twelve) e-+)
 
   ;; ---------------
@@ -145,11 +145,11 @@
   ; form-list: variadic arguments w/ no ellipsis
   (check-equal? (template (L e) (op "+" (num . 5) ,e-7)) e-+)
   (check-equal? (template (L e) (op "nop"))
-                (raw-prod (L e) (op "nop" (vector))))
+                (raw-prod (L e) (op "nop" '())))
   (check-equal? (template (L e) (let () ,e-+))
-                (raw-prod (L e) (let #() #() e-+)))
+                (raw-prod (L e) (let '() '() e-+)))
   (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
-                (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+)))
+                (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+)))
 
   ; form-list: order of evaluation
   (check-equal? (with-output-to-string

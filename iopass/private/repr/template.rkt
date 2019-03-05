@@ -41,26 +41,17 @@
 (struct ir:clause:bind (id stx) #:transparent)
 (struct ir:clause:bind/for (ids for-clauses clauses results) #:transparent)
 (struct ir:imm:prod (prod args) #:transparent)
-(struct ir:imm:vec (elems) #:transparent)
+(struct ir:imm:cons (head tail) #:transparent)
 (struct ir:imm:append (front back) #:transparent)
 
 (struct ir:for-clause (id list-stx) #:transparent)
 
-(define ir:imm:empty (ir:imm:vec '()))
-
-(define (ir:imm:cons hd tl)
-  (match tl
-    [(ir:imm:vec elems)
-     (ir:imm:vec (cons hd elems))]
-    [(ir:imm:append a b)
-     (ir:imm:append (ir:imm:cons hd a) b)]
-    [_
-     (ir:imm:append (ir:imm:vec (list hd)) tl)]))
+(define ir:imm:empty #''())
 
 (define (ir:imm:auto-append front back)
-  (match back
-    [(ir:imm:vec '()) front]
-    [_ (ir:imm:append front back)]))
+  (if (equal? back ir:imm:empty)
+    front
+    (ir:imm:append front back)))
 
 ;; --------------------
 ;; inside-out context to describe iteration variables
@@ -220,13 +211,14 @@
        (quasisyntax/loc src-stx
          (#,ctor-id
           #,@(map ir->stx args)))]
-      [(ir:imm:vec elems)
+      [(ir:imm:cons h t)
        (quasisyntax/loc src-stx
-         (vector #,@(map ir->stx elems)))]
-      [(ir:imm:append hd tl)
+         (cons #,(ir->stx h)
+               #,(ir->stx t)))]
+      [(ir:imm:append f b)
        (quasisyntax/loc src-stx
-         (vector-append #,(ir->stx hd)
-                        #,(ir->stx tl)))]
+         (append #,(ir->stx f)
+                 #,(ir->stx b)))]
       [(? syntax? stx) stx])))
 
 ;; ----------------
@@ -268,9 +260,10 @@
   (define-match-expander ir:imm:prod*
     (syntax-rules ()
       [(_ pr arg ...) (ir:imm:prod (== pr) (list arg ...))]))
-  (define-match-expander ir:imm:vec*
+  (define-match-expander ir:imm:list
     (syntax-rules ()
-      [(_ elem ...) (ir:imm:vec (list elem ...))]))
+      [(_) (stx: '())]
+      [(_ h t ...) (ir:imm:cons h (ir:imm:list t ...))]))
 
   (define-syntax-rule (check-metaterm->ir spec mt-stx
                                           bind-patterns ...
@@ -332,7 +325,7 @@
                       (ir:clause:check (stx: tmp1) (== nt-c))
                       (ir:imm:prod* pr-B
                                     (stx: 'sym)
-                                    (ir:imm:vec* (ir:imm:prod* pr-C)
+                                    (ir:imm:list (ir:imm:prod* pr-C)
                                                  (stx: tmp1))))
 
   ;; - ellipsis (simple)
@@ -386,6 +379,6 @@
                               (list (ir:for-clause (stx: tmp3) (stx: tmp2)))
                               (list (ir:clause:check (stx: tmp3) (== tm-i)))
                               (list (stx: tmp3))))
-                       (list (ir:imm:append (ir:imm:vec (list (stx: tmp1)))
-                                            (stx: tmp4))))
+                       (list (ir:imm:cons (stx: tmp1)
+                                          (stx: tmp4))))
                       (ir:imm:prod* pr-Mat (stx: tmp5))))
