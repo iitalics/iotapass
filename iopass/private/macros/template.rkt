@@ -151,6 +151,11 @@
   (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
                 (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+)))
 
+  ; form-list: ellipsis
+  (let ([x* '(x y)] [i* '(5 7)])
+    (check-equal? (template (L e) (let ([,x* (num . ,i*)] ...) ,e-+))
+                  (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+))))
+
   ; form-list: order of evaluation
   (check-equal? (with-output-to-string
                   (λ ()

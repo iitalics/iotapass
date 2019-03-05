@@ -196,15 +196,22 @@
            #,@(map ir->stx clauses)
            #,(ir->stx body)))]
       ; clauses
-      [(ir:clause:bind id rhs-stx)
-       (quasisyntax/loc src-stx
-         (define-values [#,id] #,rhs-stx))]
       [(ir:clause:check stx spec)
        (quasisyntax/loc src-stx
          (unless (#,(spec-predicate spec repr-ids) #,stx)
            (raise-argument-error '#,macro-head
                                  '#,(spec-expectation-string spec)
                                  #,stx)))]
+      [(ir:clause:bind id rhs-stx)
+       (quasisyntax/loc src-stx
+         (define-values [#,id] #,rhs-stx))]
+      [(ir:clause:bind/for ids for-clauses clauses bodies)
+       (define/syntax-parse (elem-id ...) (map ir:for-clause-id for-clauses))
+       (define/syntax-parse (list ...) (map ir:for-clause-list-stx for-clauses))
+       (quasisyntax/loc src-stx
+         (define-values #,ids
+           (for/lists #,ids ([elem-id (in-list list)] ...)
+             (values #,@(map ir->stx bodies)))))]
       ; immediates
       [(ir:imm:prod pr args)
        (define ctor-id (car (hash-ref (language-repr-ids-productions repr-ids) pr)))
