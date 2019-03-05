@@ -146,6 +146,8 @@
   (check-equal? (template (L e) (op "+" (num . 5) ,e-7)) e-+)
   (check-equal? (template (L e) (op "nop"))
                 (raw-prod (L e) (op "nop" (vector))))
+  (check-equal? (template (L e) (let () ,e-+))
+                (raw-prod (L e) (let #() #() e-+)))
   (check-equal? (template (L e) (let ([x ,e-5] [y ,e-7]) ,e-+))
                 (raw-prod (L e) (let #(x y) (vector e-5 e-7) e-+)))
 
