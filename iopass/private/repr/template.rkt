@@ -20,46 +20,50 @@
 ;; -------------
 
 ;; ir ::=
-;;   | (ir:top-level [listof ir:clause] ir:imm)
+;;   | (ir:top-level [listof ir:clause] ir:expr)
 ;;
 ;; ir:clause ::=
 ;;   | (ir:clause:check stx spec nat)
 ;;   | (ir:clause:bind id stx)
-;;   | (ir:clause:bind/for [listof id]
-;;                         [listof ir:for-clause]
-;;                         [listof ir:clause]
-;;                         [listof ir:imm])
 ;;
-;; ir:imm ::=
-;;   | (ir:imm:prod production [listof ir:imm])
-;;   | (ir:imm:vec [listof ir:imm])
-;;   | (ir:imm:append ir:imm ir:imm)
+;; ir:expr ::=
+;;   | (ir:prod production [listof ir:expr])
+;;   | (ir:vec [listof ir:expr])
+;;   | (ir:append ir:expr ir:expr)
+;;   | (ir:values [listof ir:expr])
+;;   | (ir:for [listof ir:for-clause] ir:expr [listof id] ir:expr)
 ;;   | identifier
 ;;   | #'(quote <any>)
 
 (struct ir:top-level (clauses body) #:transparent)
 (struct ir:clause:check (stx spec depth) #:transparent)
 (struct ir:clause:bind (id stx) #:transparent)
-(struct ir:clause:bind/for (ids for-clauses clauses results) #:transparent)
-(struct ir:imm:prod (prod args) #:transparent)
-(struct ir:imm:cons (head tail) #:transparent)
-(struct ir:imm:append (front back) #:transparent)
+(struct ir:prod (prod args) #:transparent)
+(struct ir:cons (head tail) #:transparent)
+(struct ir:append (front back) #:transparent)
+(struct ir:values (exprs) #:transparent)
+(struct ir:for (for-clauses loop-expr list-ids body) #:transparent)
 
 (struct ir:for-clause (id list-stx) #:transparent)
 
-(define ir:imm:empty #''())
+(define ir:empty #''())
 
-(define (ir:imm:auto-append front back)
-  (if (equal? back ir:imm:empty)
+(define (ir:auto-append front back)
+  (if (equal? back ir:empty)
     front
-    (ir:imm:append front back)))
+    (ir:append front back)))
+
+(define (ir:auto-values exprs)
+  (match exprs
+    [(list expr) expr]
+    [_ (ir:values exprs)]))
 
 ;; --------------------
 ;; inside-out context to describe iteration variables
 ;; --------------------
 ;;
 ;; For instance, a pass at ellipsis-depth 2 may return this ctx:
-;;   (ctx:for-loop {y x} (ctx:for-loop {x mylist} #f))
+;;   (for-loop {y x} (for-loop {x mylist} #f))
 ;; along with these immediates:
 ;;   (list #'y #''0)
 ;; This could be hypothetically transformed into this code:
@@ -73,22 +77,22 @@
 ;; syntax.
 ;; --------------------
 
-;; ctx ::=
+;; loop-ctx ::=
 ;;   | #f
-;;   | (ctx:for-loop [listof ir:for-clause] ctx)
-(struct ctx:for-loop (clauses up) #:transparent)
+;;   | (for-loop [listof ir:for-clause] loop-ctx)
+(struct for-loop (clauses up) #:transparent)
 
-;; nat -> ctx
-(define (empty-ctx depth)
-  (for/fold ([ctx #f]) ([_ (in-range depth)])
-    (ctx:for-loop '() ctx)))
+;; nat -> loop-ctx
+(define (empty-loops depth)
+  (for/fold ([cx #f]) ([_ (in-range depth)])
+    (for-loop '() cx)))
 
-;; ctx ctx -> ctx
-(define/match (ctx-merge cx1 cx2)
+;; loop-ctx loop-ctx -> loop-ctx
+(define/match (merge-loops cx1 cx2)
   [{#f #f} #f]
-  [{(ctx:for-loop fcs1 up1) (ctx:for-loop fcs2 up2)}
-   (ctx:for-loop (append fcs1 fcs2)
-                 (ctx-merge up1 up2))])
+  [{(for-loop fcs1 up1) (for-loop fcs2 up2)}
+   (for-loop (append fcs1 fcs2)
+             (merge-loops up1 up2))])
 
 ;; --------------------
 ;; metaterm -> ir
@@ -124,7 +128,10 @@
         [m (trav depth m)]))
     (values (trav 0 initial-mt) (reverse clauses)))
 
-  ;; nat metaterm -> ctx [listof ir:clause] [listof ir:imm]
+  ;; ir-kont = [ir:expr -> ir:expr]
+  (define (id-kont x) x)
+
+  ;; nat metaterm -> loop-ctx ir-kont [listof ir:expr]
   ; Compile an intermediate metaterm at the given ellipsis depth. The term should not have
   ; any side-effectful expressions ('rebind' should have been called first).
   ; The resulting ctx must have depth equal to the given depth. In particular, this
@@ -132,70 +139,73 @@
   (define (anf depth mt)
     (match mt
       [(mt:unquoted stx spec)
-       ; create nested ctx according to depth, something like:
+       ; create nested loop-ctx according to depth, something like:
        ; (for ([x0 stx]) (for ([x1 x0]) (for ([x2 x1]) ..)))
-       (for/fold ([cx #f]
-                  [stx stx]
-                  #:result (values cx '() (list stx)))
+       (for/fold ([cx #f] [stx stx] #:result (values cx id-kont (list stx)))
                  ([_ (in-range depth)])
          (define id (fresh))
-         (values (ctx:for-loop (list (ir:for-clause id stx)) cx)
+         (values (for-loop (list (ir:for-clause id stx))
+                           cx)
                  id))]
 
       [(mt:datum stx spec)
        (define stx+q #`(quote #,stx))
-       (values (empty-ctx depth) '() (list stx+q))]
+       (values (empty-loops depth)
+               id-kont
+               (list stx+q))]
 
       [(mt:prod prod body-mt)
-       (define-values [cx cls ims] (anf depth body-mt))
-       (values cx cls (list (ir:imm:prod prod ims)))]
+       (define-values [cx kont exprs] (anf depth body-mt))
+       (values cx kont (list (ir:prod prod exprs)))]
 
       [(mt:multiple cols)
-       (let loop ([cols cols]) ; -> ctx [listof ir:clause] [listof ir:imm]
+       (let loop ([cols cols]) ; -> loop-ctx ir-kont [listof ir:expr]
          (match cols
            ['()
-            (values (empty-ctx depth)
-                    '()
+            (values (empty-loops depth)
+                    id-kont
                     '())]
+
            [(cons mt* cols*)
-            (define-values [cx1 cls1 ims1] (anf depth mt*))
-            (define-values [cx2 cls2 ims2] (loop cols*))
-            (values (ctx-merge cx1 cx2)
-                    (append cls1 cls2)
-                    (append ims1 ims2))]))]
+            (define-values [cx1 kont1 exprs1] (anf depth mt*))
+            (define-values [cx2 kont2 exprs2] (loop cols*))
+            (values (merge-loops cx1 cx2)
+                    (compose kont1 kont2)
+                    (append exprs1 exprs2))]))]
 
       [(mt:build n-cols rows)
-       (let loop ([rows rows]) ; -> ctx [listof ir:clause] [listof ir:imm]
+       (let loop ([rows rows]) ; -> loop-ctx ir-kont [listof ir:expr]
          (match rows
            ['()
-            (values (empty-ctx depth)
-                    '()
-                    (make-list n-cols ir:imm:empty))]
+            (values (empty-loops depth)
+                    id-kont
+                    (make-list n-cols ir:empty))]
 
-           ; compile ellipsis into ir:clause:bind/for & ir:imm:append
+           ; compile ellipsis into ir:for & ir:append
            [(cons (mt:e list-mt) rows*)
-            (define-values [list-cx list-cls list-ims] (anf (add1 depth) list-mt))
-            (match-define (ctx:for-loop for-cls cx1) list-cx)
-            (define-values [cx2 cls ims] (loop rows*))
-            (define list-ids (map (λ (_) (fresh)) list-ims))
-            (define clause (ir:clause:bind/for list-ids for-cls list-cls list-ims))
-            (values (ctx-merge cx1 cx2)
-                    (cons clause cls)
-                    (map ir:imm:auto-append list-ids ims))]
+            (define-values [list-cx list-kont elems] (anf (add1 depth) list-mt))
+            (match-define (for-loop for-clauses f-cx) list-cx)
+            (define list-ids (map (λ (_) (fresh)) elems))
+            (define elems* (ir:auto-values elems))
+            (define f-kont (curry ir:for for-clauses (list-kont elems*) list-ids))
+            (define-values [b-cx b-kont b-exprs] (loop rows*))
+            (values (merge-loops f-cx b-cx)
+                    (compose f-kont b-kont)
+                    (map ir:auto-append list-ids b-exprs))]
 
-           ; compile non-ellipsis elements into just ir:imm:cons
+           ; compile non-ellipsis elements into just ir:cons
            [(cons mt* rows*)
-            (define-values [cx1 cls1 ims1] (anf depth mt*))
-            (define-values [cx2 cls2 ims2] (loop rows*))
-            (values (ctx-merge cx1 cx2)
-                    (append cls1 cls2)
-                    (map ir:imm:cons ims1 ims2))]))]))
+            (define-values [h-cx h-kont h-exprs] (anf depth mt*))
+            (define-values [t-cx t-kont t-exprs] (loop rows*))
+            (values (merge-loops h-cx t-cx)
+                    (compose h-kont t-kont)
+                    (map ir:cons h-exprs t-exprs))]))]))
 
   ;;;;;;;;;;;;;;;;
 
-  (define-values [initial-mt* cls/rb] (rebind+check initial-mt))
-  (match-define-values [#f cls/anf (list im)] (anf 0 initial-mt*))
-  (ir:top-level (append cls/rb cls/anf) im))
+  (define-values [initial-mt* clauses] (rebind+check initial-mt))
+  (match-define-values [#f kont (list expr)] (anf 0 initial-mt*))
+  (ir:top-level clauses (kont expr)))
 
 ;; -------------
 ;; compile-template
@@ -225,27 +235,32 @@
       [(ir:clause:bind id rhs-stx)
        (quasisyntax/loc src-stx
          (define-values [#,id] #,rhs-stx))]
-      [(ir:clause:bind/for ids for-clauses clauses bodies)
-       (define/syntax-parse (elem-id ...) (map ir:for-clause-id for-clauses))
-       (define/syntax-parse (list ...) (map ir:for-clause-list-stx for-clauses))
-       (quasisyntax/loc src-stx
-         (define-values #,ids
-           (for/lists #,ids ([elem-id (in-list list)] ...)
-             (values #,@(map ir->stx bodies)))))]
-      ; immediates
-      [(ir:imm:prod pr args)
+      ; expressions
+      [(ir:prod pr args)
        (define ctor-id (car (hash-ref (language-repr-ids-productions repr-ids) pr)))
        (quasisyntax/loc src-stx
          (#,ctor-id
           #,@(map ir->stx args)))]
-      [(ir:imm:cons h t)
+      [(ir:cons h t)
        (quasisyntax/loc src-stx
          (cons #,(ir->stx h)
                #,(ir->stx t)))]
-      [(ir:imm:append f b)
+      [(ir:append f b)
        (quasisyntax/loc src-stx
          (append #,(ir->stx f)
                  #,(ir->stx b)))]
+      [(ir:values es)
+       (quasisyntax/loc src-stx
+         (values #,@(map ir->stx es)))]
+      [(ir:for for-clauses elem-expr out-ids body)
+       (define/syntax-parse (id ...) (map ir:for-clause-id for-clauses))
+       (define/syntax-parse (list ...) (map ir:for-clause-list-stx for-clauses))
+       (quasisyntax/loc src-stx
+         (let-values ([#,out-ids
+                       (for/lists #,out-ids
+                                  ([id (in-list list)] ...)
+                         #,(ir->stx elem-expr))])
+           #,(ir->stx body)))]
       [(? syntax? stx) stx])))
 
 ;; ----------------
@@ -298,13 +313,10 @@
     (λ () (set! i (add1 i)) (format-id #'_ "tmp~a" i)))
 
   ; Pattern abbreviations
-  (define-match-expander ir:imm:prod*
+  (define-match-expander ir:list
     (syntax-rules ()
-      [(_ pr arg ...) (ir:imm:prod (== pr) (list arg ...))]))
-  (define-match-expander ir:imm:list
-    (syntax-rules ()
-      [(_) (stx: '())]
-      [(_ h t ...) (ir:imm:cons h (ir:imm:list t ...))]))
+      [(_) (== ir:empty)]
+      [(_ h t ...) (ir:cons h (ir:list t ...))]))
 
   (define-syntax-rule (check-metaterm->ir spec mt-stx
                                           bind-patterns ...
@@ -352,36 +364,33 @@
 
   ;; test productions
   (check-metaterm->ir nt-c #'(C)
-                      (ir:imm:prod* pr-C))
+                      (ir:prod (== pr-C) '()))
 
   (check-metaterm->ir nt-pt #'(Point 3 4)
                       (ir:clause:check (stx: '3) (== tm-i) 0)
                       (ir:clause:check (stx: '4) (== tm-i) 0)
-                      (ir:imm:prod* pr-Pt (stx: '3) (stx: '4)))
+                      (ir:prod (== pr-Pt) (list (stx: '3) (stx: '4))))
 
   ;; test build
   (check-metaterm->ir nt-ab #'(B sym (C) ,some-c)
                       (ir:clause:check (stx: 'sym) (== tm-xy) 0)
                       (ir:clause:bind (stx: tmp1) (stx: some-c))
                       (ir:clause:check (stx: tmp1) (== nt-c) 0)
-                      (ir:imm:prod* pr-B
-                                    (stx: 'sym)
-                                    (ir:imm:list (ir:imm:prod* pr-C)
-                                                 (stx: tmp1))))
+                      (ir:prod (== pr-B)
+                               (list (stx: 'sym)
+                                     (ir:list (ir:prod (== pr-C) '())
+                                              (stx: tmp1)))))
 
   ;; - ellipsis (simple)
   (check-metaterm->ir nt-ab (quote-syntax (B sym ,c-list ...))
                       (ir:clause:check (stx: 'sym) (== tm-xy) 0)
                       (ir:clause:bind (stx: tmp1) (stx: c-list))
                       (ir:clause:check (stx: tmp1) (== nt-c) 1)
-                      (ir:clause:bind/for (list (stx: tmp3))
-                                          (list (ir:for-clause (stx: tmp2)
-                                                               (stx: tmp1)))
-                                          (list)
-                                          (list (stx: tmp2)))
-                      (ir:imm:prod* pr-B
-                                    (stx: 'sym)
-                                    (stx: tmp3)))
+                      (ir:for (list (ir:for-clause (stx: tmp2) (stx: tmp1)))
+                              (stx: tmp2)
+                              (list (stx: tmp3))
+                              (ir:prod (== pr-B)
+                                       (list (stx: 'sym) (stx: tmp3)))))
 
   ;; - ellipsis (parallel)
   (check-metaterm->ir nt-tbl (quote-syntax (Tbl [,x* ,i*] ...))
@@ -389,31 +398,34 @@
                       (ir:clause:check (stx: tmp1) (== tm-xy) 1)
                       (ir:clause:bind (stx: tmp2) (stx: i*))
                       (ir:clause:check (stx: tmp2) (== tm-i) 1)
-                      (ir:clause:bind/for
-                       (list (stx: tmp5) (stx: tmp6))
-                       (list (ir:for-clause (stx: tmp3) (stx: tmp1))
-                             (ir:for-clause (stx: tmp4) (stx: tmp2)))
-                       (list)
-                       (list (stx: tmp3)
-                             (stx: tmp4)))
-                      (ir:imm:prod* pr-Tbl
-                                    (stx: tmp5)
-                                    (stx: tmp6)))
+                      (ir:for (list (ir:for-clause (stx: tmp3) (stx: tmp1))
+                                    (ir:for-clause (stx: tmp4) (stx: tmp2)))
+                              ; loop expr:
+                              (ir:values (list (stx: tmp3) (stx: tmp4)))
+                              ; out ids:
+                              (list (stx: tmp5) (stx: tmp6))
+                              ; body:
+                              (ir:prod (== pr-Tbl)
+                                       (list (stx: tmp5)
+                                             (stx: tmp6)))))
 
   ;; - ellipsis (higher ellipsis depth)
   (check-metaterm->ir nt-mat (quote-syntax (Mat [,i** ...] ...))
                       (ir:clause:bind (stx: tmp1) (stx: i**))
                       (ir:clause:check (stx: tmp1) (== tm-i) 2)
-                      (ir:clause:bind/for
-                       (list (stx: tmp5))
-                       (list (ir:for-clause (stx: tmp2) (stx: tmp1)))
-                       (list (ir:clause:bind/for
-                              (list (stx: tmp4))
-                              (list (ir:for-clause (stx: tmp3) (stx: tmp2)))
-                              (list)
-                              (list (stx: tmp3))))
-                       (list (stx: tmp4)))
-                      (ir:imm:prod* pr-Mat (stx: tmp5)))
+                      (ir:for (list (ir:for-clause (stx: tmp2) (stx: tmp1)))
+                              ; loop expr:
+                              (ir:for (list (ir:for-clause (stx: tmp3) (stx: tmp2)))
+                                      ; loop expr:
+                                      (stx: tmp3)
+                                      ; out ids:
+                                      (list (stx: tmp4))
+                                      ; body:
+                                      (stx: tmp4))
+                              ; out ids:
+                              (list (stx: tmp5))
+                              ; body:
+                              (ir:prod (== pr-Mat) (list (stx: tmp5)))))
 
   ;; - ellipsis (combined ellipsis depth)
   (check-metaterm->ir nt-mat (quote-syntax (Mat [,i* ,i** ...] ...))
@@ -421,15 +433,18 @@
                       (ir:clause:check (stx: tmp1) (== tm-i) 1)
                       (ir:clause:bind (stx: tmp2) (stx: i**))
                       (ir:clause:check (stx: tmp2) (== tm-i) 2)
-                      (ir:clause:bind/for
-                       (list (stx: tmp7))
-                       (list (ir:for-clause (stx: tmp3) (stx: tmp1))
-                             (ir:for-clause (stx: tmp4) (stx: tmp2)))
-                       (list (ir:clause:bind/for
-                              (list (stx: tmp6))
-                              (list (ir:for-clause (stx: tmp5) (stx: tmp4)))
-                              (list)
-                              (list (stx: tmp5))))
-                       (list (ir:imm:cons (stx: tmp3)
-                                          (stx: tmp6))))
-                      (ir:imm:prod* pr-Mat (stx: tmp7))))
+                      (ir:for (list (ir:for-clause (stx: tmp3) (stx: tmp1))
+                                    (ir:for-clause (stx: tmp4) (stx: tmp2)))
+                              ; loop expr:
+                              (ir:for (list (ir:for-clause (stx: tmp5) (stx: tmp4)))
+                                      ; loop expr:
+                                      (stx: tmp5)
+                                      ; out ids:
+                                      (list (stx: tmp6))
+                                      ; body:
+                                      (ir:cons (stx: tmp3)
+                                               (stx: tmp6)))
+                              ; out ids:
+                              (list (stx: tmp7))
+                              ; body:
+                              (ir:prod (== pr-Mat) (list (stx: tmp7))))))
