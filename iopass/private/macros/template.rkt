@@ -125,7 +125,7 @@
   (check-eq? (template (L e) ,e-5) e-5)
   (check-exn #px"template: contract violation\n  expected: integer\\?"
              (λ () (template (L i) ,"not a number")))
-  (check-exn #px"template: contract violation\n  expected: nonterminal 'e'"
+  (check-exn #px"template: contract violation\n  expected: <nonterminal:e>"
              (λ () (template (L e) ,'|not an expr|)))
 
   ; datum
@@ -154,7 +154,9 @@
   ; form-list: ellipsis
   (let ([x* '(x y)] [i* '(5 7)])
     (check-equal? (template (L e) (let ([,x* (num . ,i*)] ...) ,e-+))
-                  (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+))))
+                  (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+)))
+    (check-exn #px"template: contract violation\n  expected: \\(listof symbol\\?\\)"
+               (λ () (template (L e) (let ([,i* (num . ,i*)] ...) ,e-+)))))
 
   ; form-list: order of evaluation
   (check-equal? (with-output-to-string
