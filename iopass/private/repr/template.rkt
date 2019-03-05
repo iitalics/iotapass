@@ -176,8 +176,8 @@
 
   ;;;;;;;;;;;;;;;;
 
-  (match-let-values ([(#f cs (list im)) (anf 0 initial-mt)])
-    (ir:top-level cs im)))
+  (match-let-values ([(#f cls (list im)) (anf 0 initial-mt)])
+    (ir:top-level cls im)))
 
 ;; -------------
 ;; compile-template
