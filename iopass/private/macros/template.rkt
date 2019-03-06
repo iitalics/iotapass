@@ -90,7 +90,8 @@
        (op s e ...)
        (print e)
        (let ([x e] ...) e)]
-    [d ::= (def x e)])
+    [d ::= (def x e)]
+    [mat ::= (Matrix [i ...] ...)])
 
   ;; ---------------
   ;; 'raw-prod' tests
@@ -156,7 +157,17 @@
     (check-equal? (template (L e) (let ([,x* (num . ,i*)] ...) ,e-+))
                   (raw-prod (L e) (let '(x y) (list e-5 e-7) e-+)))
     (check-exn #px"template: contract violation\n  expected: \\(listof symbol\\?\\)"
-               (λ () (template (L e) (let ([,i* (num . ,i*)] ...) ,e-+)))))
+               (λ () (template (L e) (let ([,i* (num . ,i*)] ...) ,e-+))))
+
+    (define C '(1 2 3))
+    (define M '((10 100) (20 200) (30 300)))
+    (check-equal? (template (L mat) (Matrix [,C ,M ...] ...))
+                  (template (L mat) (Matrix [1 10 100]
+                                            [2 20 200]
+                                            [3 30 300])))
+    (check-exn #px"all lists must have same size"
+               (λ () (template (L e) (let ([,x* (num . ,C)] ...) ,e-+)))))
+
 
   ; form-list: order of evaluation
   (check-equal? (with-output-to-string

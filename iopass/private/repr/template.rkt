@@ -10,8 +10,7 @@
  (only-in racket/syntax generate-temporary format-id)
  (only-in racket/function curry)
  racket/list
- racket/match
- syntax/parse)
+ racket/match)
 
 ;; =======================================================================================
 
@@ -218,13 +217,13 @@
        (quasisyntax/loc src-stx
          (values #,@(map ir->stx es)))]
       [(ir:for for-clauses elem-expr out-ids body)
-       (define/syntax-parse (id ...) (map ir:for-clause-id for-clauses))
-       (define/syntax-parse (list ...) (map ir:for-clause-list-stx for-clauses))
+       (define ids (map ir:for-clause-id for-clauses))
+       (define lists (map ir:for-clause-list-stx for-clauses))
        (quasisyntax/loc src-stx
          (let-values ([#,out-ids
-                       (for/lists #,out-ids
-                                  ([id (in-list list)] ...)
-                         #,(ir->stx elem-expr))])
+                       (generalized-map '#,(length out-ids)
+                                        (λ #,ids #,(ir->stx elem-expr))
+                                        #,@lists)])
            #,(ir->stx body)))]
       [(? syntax? stx) stx])))
 
@@ -232,8 +231,10 @@
 ;; helpers for contract checks
 ;; ----------------
 
-(module listof/depth racket/base
-  (provide listof/depth)
+(module runtime-helpers racket/base
+  (provide listof/depth generalized-map)
+  (require racket/list)
+
   ;; nat [any -> bool] any -> bool
   (define (listof/depth n f x)
     (if (zero? n)
@@ -241,9 +242,24 @@
       (or (null? x)
           (and (pair? x)
                (listof/depth (sub1 n) f (car x))
-               (listof/depth n        f (cdr x)))))))
+               (listof/depth n        f (cdr x))))))
 
-(require (for-template 'listof/depth))
+  ;; (n : nat) [X ... -> Y ...] [listof X] ... -> [listof Y] ...
+  ;; {where the number of Y's must be equal to 'n'}
+  (define (generalized-map n f . ls)
+    (define vs
+      (let loop ([ls ls])
+        (cond
+          [(andmap null? ls) (make-list n '())]
+          [(andmap pair? ls)
+           (call-with-values (λ () (apply f (map car ls)))
+                             (λ xs (map cons xs (loop (map cdr ls)))))]
+          [else
+           (error 'generalized-map "all lists must have same size")])))
+    ; converts lists into values
+    (let/ec f (apply f vs))))
+
+(require (for-template 'runtime-helpers))
 
 ;; spec language-repr-ids -> identifier
 (define (spec-predicate spec repr-ids)
@@ -273,7 +289,7 @@
    "../util/syntax.rkt"
    "../util/example-language-decls.rkt"
    "../syntax/metaterm.rkt"
-   (submod ".." listof/depth))
+   (submod ".." runtime-helpers))
 
   ;; listof/depth tests
   (check-true (listof/depth 0 integer? 5))
@@ -284,6 +300,20 @@
   (check-false (listof/depth 2 integer? '(1 0)))
   (check-true (listof/depth 2 integer? '((1 0) () (2 3))))
   (check-false (listof/depth 2 integer? '((1 0) 0 (2 3))))
+
+  ;; generalized-map tests
+  (define (id&sqr x) (values x (* x x)))
+  (check-equal? (generalized-map 1 + '(1 2 3) '(4 5 6))
+                '(5 7 9))
+  (check-equal? (generalized-map 1 + '() '())
+                '())
+  (check-equal? (generalized-map 1 (λ () "hi"))
+                '())
+  (check-equal? (call-with-values (λ () (generalized-map 2 id&sqr '(1 2 3)))
+                                  vector)
+                #((1 2 3) (1 4 9)))
+  (check-exn #px"all lists must have same size"
+             (λ () (generalized-map 1 * '(1 2 3) '(4 5))))
 
   ;; --------------
 
