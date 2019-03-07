@@ -13,20 +13,6 @@
   "../repr/ids.rkt"))
 
 (begin-for-syntax
-  (define-syntax-class lang+mv
-    #:description "language-scoped metavariable name"
-    #:attributes (language repr-ids spec)
-    [pattern (:language-definition-binding mv)
-             #:declare mv (c:known-metavar-id (@ language))
-             #:attr spec (@ mv.spec)])
-
-  (define-syntax-class lang+nt
-    #:description "nonterminal name"
-    #:attributes (language repr-ids nonterminal)
-    [pattern (:language-definition-binding mv)
-             #:declare mv (c:nonterminal-metavar-id (@ language))
-             #:attr nonterminal (@ mv.spec)])
-
   (define-splicing-syntax-class raw-function
     #:attributes (fun head [arg 1])
     [pattern {~seq (head:id arg ...)}
@@ -44,9 +30,10 @@
 
 (define-syntax raw-prod
   (syntax-parser
-    [(_ :lang+nt
+    [(_ :c:language+metavar
         f:raw-function)
-     #:with {~var || (c:known-production-id (@ nonterminal))} (@ f.head)
+     #:with {~var nt (c:nonterminal-metavar-id (@ language))} #'metavar
+     #:with {~var || (c:known-production-id (@ nt.spec))} #'f.head
      #:with [ct pr pj] (hash-ref (language-repr-ids-productions (@ repr-ids))
                                  (@ production))
      (case (@ f.fun)
@@ -60,7 +47,7 @@
 
 (define-syntax template
   (syntax-parser
-    [(hd :lang+mv tmpl)
+    [(hd :c:language+metavar tmpl)
      (compile-template #'tmpl
                        #'hd
                        (@ repr-ids)

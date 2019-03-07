@@ -9,10 +9,12 @@
  known-metavar-id
  nonterminal-metavar-id
  terminal-metavar-id
- known-production-id)
+ known-production-id
+ language+metavar)
 
 (require
  (prefix-in ast: "../ast/decl.rkt")
+ "bindings.rkt"
  ; (prefix-in ast:t: "../ast/template.rkt")
  (for-template racket/base)
  (rename-in syntax/parse [attribute @])
@@ -163,6 +165,14 @@
            #:fail-unless (@ production)
            (format "not a production of nonterminal '~a'"
                    (ast:spec-description nt))])
+
+(define-syntax-class language+metavar
+  #:description "language-scoped metavariable name"
+  #:attributes (language repr-ids metavar spec)
+  [pattern (:language-definition-binding metavar)
+           #:declare metavar (known-metavar-id (@ language))
+           #:attr spec (@ metavar.spec)])
+
 
 (module+ test
   (require rackunit)
