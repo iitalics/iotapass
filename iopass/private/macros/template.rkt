@@ -1,6 +1,7 @@
 #lang racket/base
 (provide
- raw-prod)
+ raw-prod
+ template)
 
 (require
  (for-syntax
