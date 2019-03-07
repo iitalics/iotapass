@@ -194,7 +194,7 @@
       [(ir:check stx spec depth body)
        (quasisyntax/loc src-stx
          (if (listof/depth '#,depth
-                           #,(spec-predicate spec repr-ids)
+                           #,(spec-predicate-id spec repr-ids)
                            #,stx)
            #,(ir->stx body)
            (raise-argument-error '#,macro-head
@@ -243,14 +243,6 @@
                (listof/depth n        f (cdr x)))))))
 
 (require (for-template 'listof/depth))
-
-;; spec language-repr-ids -> identifier
-(define (spec-predicate spec repr-ids)
-  (match spec
-    [(? nonterminal-spec? nt)
-     (hash-ref (language-repr-ids-predicates repr-ids) nt)]
-    [(? terminal-spec? tm)
-     (terminal-spec-contract-id tm)]))
 
 ;; spec depth -> string
 (define (spec-expectation-string depth spec)

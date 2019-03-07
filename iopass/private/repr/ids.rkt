@@ -1,7 +1,8 @@
 #lang racket/base
 (provide
  (struct-out language-repr-ids)
- make-language-repr-ids)
+ make-language-repr-ids
+ spec-predicate-id)
 
 (require
  "../ast/decl.rkt"
@@ -43,6 +44,14 @@
 
   (language-repr-ids nts nt=>pred-id pr=>ids))
 
+;; spec language-repr-ids -> identifier
+(define (spec-predicate-id spec repr-ids)
+  (match spec
+    [(? nonterminal-spec? nt)
+     (hash-ref (language-repr-ids-predicates repr-ids) nt)]
+    [(? terminal-spec? tm)
+     (terminal-spec-contract-id tm)]))
+
 ;; =======================================================================================
 
 (module+ test
@@ -75,4 +84,7 @@
                                      (free-id= B.ref))]
                 [(== pr-C eq?) (list (free-id= C.c)
                                      (free-id= C?)
-                                     (free-id= C.ref))])))
+                                     (free-id= C.ref))]))
+
+  (check-match (spec-predicate-id tm-i lr-ids) (free-id= exact-integer?))
+  (check-match (spec-predicate-id nt-ab lr-ids) (free-id= ab?)))
